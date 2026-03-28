@@ -1,6 +1,6 @@
 # ai-incident-analyzer
 
-An API that analyzes logs and error messages to determine root causes, detect anomalies, and provide actionable recommendations. Uses rule-based pattern matching with optional OpenAI integration.
+An API that analyzes logs and error messages to determine root causes, detect anomalies, and provide actionable recommendations. Uses rule-based pattern matching — fully self-contained with no external APIs required.
 
 ## Architecture
 
@@ -22,8 +22,7 @@ src/
 
 - **Runtime:** Node.js with TypeScript
 - **Framework:** Express.js
-- **Analysis:** Rule-based pattern matching + statistical anomaly detection
-- **Optional:** OpenAI API integration (set `USE_AI=true`)
+- **Analysis:** Rule-based by default (optional: set `ANALYSIS_MODE=openai` for LLM-powered analysis)
 
 ## How to Run Locally
 

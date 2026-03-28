@@ -18,7 +18,8 @@ app.use('/anomaly', anomalyRoutes());
 
 app.listen(PORT, () => {
   console.log(`AI Incident Analyzer running on http://localhost:${PORT}`);
-  console.log(`AI mode: ${process.env.USE_AI === 'true' ? 'OpenAI' : 'Rule-based'}`);
+  const mode = process.env.ANALYSIS_MODE || 'rule-based';
+  console.log(`Analysis mode: ${mode}${mode === 'rule-based' ? ' (no external APIs)' : ''}`);
 });
 
 export default app;
