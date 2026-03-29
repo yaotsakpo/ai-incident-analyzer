@@ -3,20 +3,16 @@ import { UserStore } from '../stores/user-store';
 import { TeamStore } from '../stores/team-store';
 import { AuditStore } from '../stores/audit-store';
 import { authMiddleware, requirePermission } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { loginSchema, registerSchema, createUserSchema, updateUserRoleSchema, changePasswordSchema, switchOrgSchema } from '../schemas';
 import { UserRole } from '@incident-analyzer/shared';
 
 export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditStore?: AuditStore): Router {
   const router = Router();
   const auth = authMiddleware(userStore);
 
-  router.post('/register', async (req: Request, res: Response) => {
+  router.post('/register', validate(registerSchema), async (req: Request, res: Response) => {
     const { username, password, displayName, email } = req.body;
-    if (!username || !password || !displayName) {
-      return res.status(400).json({ error: 'username, password, and displayName are required' });
-    }
-    if (typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
     const user = await userStore.register({ username, password, displayName, email });
     if (!user) {
       return res.status(409).json({ error: 'Username already taken' });
@@ -26,11 +22,8 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
     return res.status(201).json(result);
   });
 
-  router.post('/login', async (req: Request, res: Response) => {
+  router.post('/login', validate(loginSchema), async (req: Request, res: Response) => {
     const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ error: 'username and password required' });
-    }
     const result = await userStore.authenticate(username, password);
     if (!result) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -45,10 +38,23 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
 
   router.post('/logout', (req: Request, res: Response) => {
     const header = req.headers.authorization;
+    const { refreshToken } = req.body || {};
     if (header?.startsWith('Bearer ')) {
-      userStore.logout(header.slice(7));
+      userStore.logout(header.slice(7), refreshToken);
     }
     return res.json({ message: 'Logged out' });
+  });
+
+  router.post('/refresh', async (req: Request, res: Response) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'refreshToken is required' });
+    }
+    const result = await userStore.refreshAccessToken(refreshToken);
+    if (!result) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' });
+    }
+    return res.json(result);
   });
 
   router.get('/me', auth, (req: Request, res: Response) => {
@@ -80,11 +86,8 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
     return res.json(updated);
   });
 
-  router.post('/change-password', auth, async (req: Request, res: Response) => {
+  router.post('/change-password', auth, validate(changePasswordSchema), async (req: Request, res: Response) => {
     const { newPassword } = req.body;
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-      return res.status(400).json({ error: 'newPassword must be at least 6 characters' });
-    }
     const ok = await userStore.changePassword(req.user!.id, newPassword);
     if (!ok) return res.status(404).json({ error: 'User not found' });
     return res.json({ message: 'Password changed successfully' });
@@ -98,14 +101,8 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
     return res.json({ tempPassword });
   });
 
-  router.post('/users', auth, requirePermission('users:manage'), async (req: Request, res: Response) => {
+  router.post('/users', auth, requirePermission('users:manage'), validate(createUserSchema), async (req: Request, res: Response) => {
     const { username, displayName, role, email, teamId, permissions } = req.body;
-    if (!username || !displayName || !role) {
-      return res.status(400).json({ error: 'username, displayName, and role are required' });
-    }
-    if (!['admin', 'responder', 'viewer', 'custom'].includes(role)) {
-      return res.status(400).json({ error: 'role must be admin, responder, viewer, or custom' });
-    }
 
     // Generate a random initial password
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -129,7 +126,7 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
     return res.status(201).json({ user: newUser, initialPassword });
   });
 
-  router.patch('/users/:id/role', auth, requirePermission('users:manage'), async (req: Request, res: Response) => {
+  router.patch('/users/:id/role', auth, requirePermission('users:manage'), validate(updateUserRoleSchema), async (req: Request, res: Response) => {
     if (req.params.id === req.user!.id) {
       return res.status(400).json({ error: 'Cannot change your own role' });
     }
@@ -138,9 +135,6 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
       return res.status(404).json({ error: 'User not found' });
     }
     const { role, permissions } = req.body;
-    if (!role || !['admin', 'responder', 'viewer', 'custom'].includes(role)) {
-      return res.status(400).json({ error: 'role must be admin, responder, viewer, or custom' });
-    }
     const updated = await userStore.updateUserRole(req.params.id, role as UserRole, role === 'custom' ? permissions : undefined);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     if (auditStore) await auditStore.log(req.user!.orgId, req.user!.id, req.user!.username, 'user_role_updated', 'user', `Changed ${target.displayName} role from ${target.role} to ${role}`, { targetUserId: req.params.id, oldRole: target.role, newRole: role });

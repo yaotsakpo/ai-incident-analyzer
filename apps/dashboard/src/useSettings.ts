@@ -4,7 +4,6 @@ import { api } from './api';
 const STORAGE_KEY = 'app-settings';
 
 export interface AppSettings {
-  pagerdutyKey: string;
   autoRefreshInterval: number;
   theme: 'light' | 'dark' | 'system';
   notifyOnCritical: boolean;
@@ -14,7 +13,6 @@ export interface AppSettings {
 }
 
 export const defaults: AppSettings = {
-  pagerdutyKey: '',
   autoRefreshInterval: 15,
   theme: 'dark',
   notifyOnCritical: true,

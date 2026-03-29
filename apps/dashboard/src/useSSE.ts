@@ -1,43 +1,72 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { api } from './api';
 
-type SSEHandler = (event: { type: string; data: any; timestamp: string }) => void;
+type SSEEvent = { type: string; data: any; timestamp: string };
+type SSEHandler = (event: SSEEvent) => void;
+
+// ---------------------------------------------------------------------------
+// Shared singleton EventSource so multiple components reuse one connection.
+// ---------------------------------------------------------------------------
+
+let sharedES: EventSource | null = null;
+let subscriberCount = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const listeners = new Set<SSEHandler>();
+
+function ensureConnection() {
+  if (sharedES && sharedES.readyState !== EventSource.CLOSED) return;
+
+  sharedES = new EventSource(api.streamUrl);
+
+  sharedES.onmessage = (msg) => {
+    try {
+      const parsed = JSON.parse(msg.data);
+      listeners.forEach(fn => fn(parsed));
+    } catch {}
+  };
+
+  sharedES.onerror = () => {
+    sharedES?.close();
+    sharedES = null;
+    // Reconnect after 3 s if there are still subscribers
+    if (subscriberCount > 0 && !reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (subscriberCount > 0) ensureConnection();
+      }, 3000);
+    }
+  };
+}
+
+function subscribe(handler: SSEHandler) {
+  listeners.add(handler);
+  subscriberCount++;
+  ensureConnection();
+}
+
+function unsubscribe(handler: SSEHandler) {
+  listeners.delete(handler);
+  subscriberCount--;
+  if (subscriberCount <= 0) {
+    subscriberCount = 0;
+    sharedES?.close();
+    sharedES = null;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hook — drop-in replacement, same signature as before.
+// ---------------------------------------------------------------------------
 
 export function useSSE(onEvent: SSEHandler, enabled = true) {
-  const eventSourceRef = useRef<EventSource | null>(null);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
-  const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const es = new EventSource(api.streamUrl);
-    eventSourceRef.current = es;
-
-    es.onmessage = (msg) => {
-      try {
-        const parsed = JSON.parse(msg.data);
-        onEventRef.current(parsed);
-      } catch {}
-    };
-
-    es.onerror = () => {
-      es.close();
-      // Reconnect after 3s
-      setTimeout(() => {
-        if (enabled) connect();
-      }, 3000);
-    };
-  }, [enabled]);
-
   useEffect(() => {
     if (!enabled) return;
-    connect();
-    return () => {
-      eventSourceRef.current?.close();
-      eventSourceRef.current = null;
-    };
-  }, [connect, enabled]);
+    const handler: SSEHandler = (evt) => onEventRef.current(evt);
+    subscribe(handler);
+    return () => unsubscribe(handler);
+  }, [enabled]);
 }

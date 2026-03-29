@@ -60,12 +60,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, [token]);
 
+  // Listen for auth-expired events dispatched by the api request helper
+  useEffect(() => {
+    const onExpired = () => { setUser(null); setToken(null); localStorage.removeItem('auth-token'); localStorage.removeItem('refresh-token'); };
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
+  }, []);
+
   useEffect(() => {
     if (!token) { setLoading(false); return; }
     fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(u => { setUser(u); setMustChangePassword(!!u.mustChangePassword); setNeedsOnboarding(u.role === 'admin' && u.onboardingComplete === false); setLoading(false); refreshOrgs(); })
-      .catch(() => { setToken(null); localStorage.removeItem('auth-token'); setLoading(false); });
+      .catch(() => { setToken(null); localStorage.removeItem('auth-token'); localStorage.removeItem('refresh-token'); setLoading(false); });
   }, [token, refreshOrgs]);
 
   const login = useCallback(async (username: string, password: string) => {
@@ -82,18 +89,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMustChangePassword(!!data.mustChangePassword);
       setNeedsOnboarding(data.user.role === 'admin' && data.onboardingComplete === false);
       localStorage.setItem('auth-token', data.token);
+      if (data.refreshToken) localStorage.setItem('refresh-token', data.refreshToken);
       return true;
     } catch { return false; }
   }, []);
 
   const logout = useCallback(() => {
     if (token) {
-      fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+      const refreshToken = localStorage.getItem('refresh-token');
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
     }
     setUser(null);
     setToken(null);
     setMustChangePassword(false);
     localStorage.removeItem('auth-token');
+    localStorage.removeItem('refresh-token');
   }, [token]);
 
   const isRole = useCallback((...roles: string[]) => {
@@ -140,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(data.user);
       setToken(data.token);
       localStorage.setItem('auth-token', data.token);
+      if (data.refreshToken) localStorage.setItem('refresh-token', data.refreshToken);
       refreshOrgs();
       return true;
     } catch { return false; }

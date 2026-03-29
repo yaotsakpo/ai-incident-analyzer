@@ -25,6 +25,7 @@ import { SlackService, JiraService, OpsGenieService } from './services/integrati
 import { AIProviderService } from './services/ai-provider';
 import { logger } from './services/logger';
 import { connectDB, isConnected } from './db/connection';
+import { authLimiter, webhookLimiter, apiLimiter } from './middleware/rate-limit';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -91,13 +92,13 @@ app.get('/health', async (_req, res) => {
 });
 
 // Mount routes
-app.use('/auth', authRoutes(userStore, teamStore, auditStore));
-app.use('/analyze', analyzeRoutes(incidentStore, runbookStore, userStore, pagerduty));
-app.use('/anomaly', anomalyRoutes(userStore));
-app.use('/incidents', incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));
-app.use('/runbooks', runbookRoutes(runbookStore, userStore));
-app.use('/seed', seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
-app.use('/webhooks', webhookRoutes(incidentStore));
+app.use('/auth', authLimiter, authRoutes(userStore, teamStore, auditStore));
+app.use('/analyze', apiLimiter, analyzeRoutes(incidentStore, runbookStore, userStore, pagerduty));
+app.use('/anomaly', apiLimiter, anomalyRoutes(userStore));
+app.use('/incidents', apiLimiter, incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));
+app.use('/runbooks', apiLimiter, runbookRoutes(runbookStore, userStore));
+app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
+app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore));
 app.use('/settings/integrations', settingsRoutes(settingsStore, userStore, slack, jira, opsgenie, aiProvider, pagerduty, auditStore));
 app.use('/settings/preferences', preferencesRoutes(userStore));
 app.use('/teams', teamRoutes(teamStore, userStore, auditStore));

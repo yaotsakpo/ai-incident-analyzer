@@ -8,11 +8,19 @@
     "dev:dashboard": "pnpm --filter @incident-analyzer/dashboard dev",
     "build": "pnpm -r build",
     "clean": "rm -rf apps/*/dist packages/*/dist",
-    "test:e2e": "cd e2e && npx playwright test"
+    "test:e2e": "npx playwright test"
   },
-  "keywords": ["incident-analysis", "log-analysis", "ai", "observability", "pagerduty", "runbook"],
+  "keywords": [
+    "incident-analysis",
+    "log-analysis",
+    "ai",
+    "observability",
+    "pagerduty",
+    "runbook"
+  ],
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "typescript": "^5.3.3"
   }
 }

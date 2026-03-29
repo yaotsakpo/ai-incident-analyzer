@@ -3,6 +3,8 @@ import { UserStore } from '../stores/user-store';
 import { TeamStore } from '../stores/team-store';
 import { AuditStore } from '../stores/audit-store';
 import { authMiddleware, requirePermission, requireOrgAdminOrTeamRole } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createTeamSchema, updateTeamSchema, addMemberSchema, updateMemberRoleSchema } from '../schemas';
 
 export function teamRoutes(teamStore: TeamStore, userStore: UserStore, auditStore?: AuditStore): Router {
   const router = Router();
@@ -30,16 +32,15 @@ export function teamRoutes(teamStore: TeamStore, userStore: UserStore, auditStor
   });
 
   // POST /teams — create team (admin only)
-  router.post('/', ...canManageTeams, async (req: Request, res: Response) => {
+  router.post('/', ...canManageTeams, validate(createTeamSchema), async (req: Request, res: Response) => {
     const { name, description } = req.body;
-    if (!name) return res.status(400).json({ error: 'name is required' });
     const team = await teamStore.create(name, description || '', req.user!.id, req.user!.orgId);
     if (auditStore) await auditStore.log(req.user!.orgId, req.user!.id, req.user!.username, 'team_created', 'team', `Created team "${name}"`, { teamId: team.id });
     return res.status(201).json(team);
   });
 
   // PUT /teams/:id — update team info (admin only)
-  router.put('/:id', ...canManageTeams, async (req: Request, res: Response) => {
+  router.put('/:id', ...canManageTeams, validate(updateTeamSchema), async (req: Request, res: Response) => {
     const existing = await teamStore.get(req.params.id);
     if (!existing || existing.orgId !== req.user!.orgId) return res.status(404).json({ error: 'Team not found' });
     const { name, description } = req.body;
@@ -59,11 +60,10 @@ export function teamRoutes(teamStore: TeamStore, userStore: UserStore, auditStor
   });
 
   // POST /teams/:id/members — add member (org admin or team owner/admin)
-  router.post('/:id/members', ...teamAdminOrOrgAdmin, async (req: Request, res: Response) => {
+  router.post('/:id/members', ...teamAdminOrOrgAdmin, validate(addMemberSchema), async (req: Request, res: Response) => {
     const existingTeam = await teamStore.get(req.params.id);
     if (!existingTeam || existingTeam.orgId !== req.user!.orgId) return res.status(404).json({ error: 'Team not found' });
     const { userId, role } = req.body;
-    if (!userId) return res.status(400).json({ error: 'userId is required' });
     const memberRole = role === 'admin' ? 'admin' : 'member';
     const team = await teamStore.addMember(req.params.id, userId, memberRole);
     if (!team) return res.status(404).json({ error: 'Team not found' });
@@ -101,13 +101,10 @@ export function teamRoutes(teamStore: TeamStore, userStore: UserStore, auditStor
   });
 
   // PATCH /teams/:id/members/:userId — update member role (org admin or team owner/admin)
-  router.patch('/:id/members/:userId', ...teamAdminOrOrgAdmin, async (req: Request, res: Response) => {
+  router.patch('/:id/members/:userId', ...teamAdminOrOrgAdmin, validate(updateMemberRoleSchema), async (req: Request, res: Response) => {
     const existingTeam = await teamStore.get(req.params.id);
     if (!existingTeam || existingTeam.orgId !== req.user!.orgId) return res.status(404).json({ error: 'Team not found' });
     const { role } = req.body;
-    if (!role || !['owner', 'admin', 'member'].includes(role)) {
-      return res.status(400).json({ error: 'role must be owner, admin, or member' });
-    }
     const team = await teamStore.updateMemberRole(req.params.id, req.params.userId, role);
     if (!team) return res.status(404).json({ error: 'Team or member not found' });
     if (auditStore) {

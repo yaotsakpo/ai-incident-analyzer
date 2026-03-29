@@ -179,7 +179,7 @@ export default function IncidentDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const updateStatus = async (status: string) => {
+  const updateStatus = async (status: import('@incident-analyzer/shared').IncidentStatus) => {
     setUpdating(true);
     await api.updateIncidentStatus(id!, status);
     toast(`Incident ${status}`, 'success');

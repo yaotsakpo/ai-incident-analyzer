@@ -7,7 +7,8 @@ import { isConnected } from '../db/connection';
 
 const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET || 'incident-analyzer-jwt-secret-change-in-production';
-const JWT_EXPIRY = '24h';
+const ACCESS_TOKEN_EXPIRY = '15m';
+const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export const DEMO_ORG_ID = 'demo-org';
 
@@ -17,10 +18,17 @@ const DEMO_USERS: Array<{ username: string; password: string; displayName: strin
   { username: 'viewer', password: 'view123', displayName: 'Team Viewer', role: 'viewer', email: 'viewer@example.com' },
 ];
 
+interface RefreshTokenEntry {
+  userId: string;
+  orgId: string;
+  expiresAt: number;
+}
+
 export class UserStore {
   private cache: Map<string, User & { password: string }> = new Map();
   private tokens: Map<string, string> = new Map(); // legacy token -> userId (kept for migration)
   private revokedTokens: Set<string> = new Set(); // JWT blacklist for logout
+  private refreshTokens: Map<string, RefreshTokenEntry> = new Map(); // refreshToken -> entry
 
   private useMongo(): boolean { return isConnected(); }
 
@@ -73,7 +81,20 @@ export class UserStore {
     }
   }
 
-  async authenticate(username: string, password: string): Promise<{ user: User; token: string } | null> {
+  /** Generate an access + refresh token pair for a user */
+  private issueTokenPair(userId: string, orgId: string): { token: string; refreshToken: string } {
+    const token = jwt.sign({ userId, orgId }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+    const refreshToken = uuidv4();
+    this.refreshTokens.set(refreshToken, { userId, orgId, expiresAt: Date.now() + REFRESH_TOKEN_EXPIRY_MS });
+    // Prune expired refresh tokens periodically
+    if (this.refreshTokens.size > 5000) {
+      const now = Date.now();
+      for (const [k, v] of this.refreshTokens) { if (v.expiresAt < now) this.refreshTokens.delete(k); }
+    }
+    return { token, refreshToken };
+  }
+
+  async authenticate(username: string, password: string): Promise<{ user: User; token: string; refreshToken: string } | null> {
     await this.ensureReady();
     if (this.useMongo()) {
       const doc = await UserModel.findOne({ username }).lean();
@@ -81,9 +102,9 @@ export class UserStore {
         const match = await bcrypt.compare(password, (doc as any).password);
         if (!match) return null;
         const { password: pw, _id, __v, ...user } = doc as any;
-        const token = jwt.sign({ userId: doc.id, orgId: user.orgId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+        const pair = this.issueTokenPair(doc.id, user.orgId);
         this.cache.set(doc.id, { ...user, password: pw });
-        return { user, token };
+        return { user, ...pair };
       }
       return null;
     }
@@ -92,11 +113,26 @@ export class UserStore {
         const match = await bcrypt.compare(password, u.password);
         if (!match) continue;
         const { password: _, ...user } = u;
-        const token = jwt.sign({ userId: u.id, orgId: u.orgId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-        return { user, token };
+        const pair = this.issueTokenPair(u.id, u.orgId);
+        return { user, ...pair };
       }
     }
     return null;
+  }
+
+  /** Validate a refresh token and issue a new token pair (rotation) */
+  async refreshAccessToken(refreshToken: string): Promise<{ user: User; token: string; refreshToken: string } | null> {
+    const entry = this.refreshTokens.get(refreshToken);
+    if (!entry || entry.expiresAt < Date.now()) {
+      if (entry) this.refreshTokens.delete(refreshToken);
+      return null;
+    }
+    // Rotate: delete old, issue new pair
+    this.refreshTokens.delete(refreshToken);
+    const user = await this.getUser(entry.userId);
+    if (!user) return null;
+    const pair = this.issueTokenPair(entry.userId, entry.orgId);
+    return { user, ...pair };
   }
 
   validateToken(token: string): User | null {
@@ -154,9 +190,10 @@ export class UserStore {
     }
   }
 
-  logout(token: string): void {
+  logout(token: string, refreshToken?: string): void {
     this.tokens.delete(token);
     this.revokedTokens.add(token);
+    if (refreshToken) this.refreshTokens.delete(refreshToken);
     // Prune old entries periodically (simple size cap)
     if (this.revokedTokens.size > 10000) {
       const entries = Array.from(this.revokedTokens);
@@ -384,8 +421,8 @@ export class UserStore {
     const { password: pw, _id, __v, ...user } = doc as any;
     this.cache.set(userId, { ...user, password: pw });
 
-    const token = jwt.sign({ userId, orgId: targetOrgId }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    return { user, token };
+    const pair = this.issueTokenPair(userId, targetOrgId);
+    return { user, ...pair };
   }
 
   async addOrgMembership(userId: string, orgId: string, role: UserRole): Promise<boolean> {

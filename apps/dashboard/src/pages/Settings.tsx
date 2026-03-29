@@ -4,6 +4,7 @@ import Expandable from '../components/Expandable';
 import { useSettings, defaults, AppSettings } from '../useSettings';
 import { useAuth } from '../useAuth';
 import { api } from '../api';
+import UserManagement from '../components/settings/UserManagement';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
@@ -14,7 +15,6 @@ export default function Settings() {
   const canManageTeams = hasPerm('teams:manage');
   const canManageUsers = hasPerm('users:manage');
   const canManageSettings = hasPerm('settings:manage');
-  const [saved, setSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
   // Profile editing
@@ -26,24 +26,8 @@ export default function Settings() {
   const [savingUsername, setSavingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState('');
 
-  // Password reset (admin)
-  const [resetResult, setResetResult] = useState<{ userId: string; tempPassword: string } | null>(null);
-  const [resetCopied, setResetCopied] = useState(false);
-
-  // Create user (admin)
-  const [showCreateUser, setShowCreateUser] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newDisplayName, setNewDisplayName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<string>('responder');
-  const [newTeamId, setNewTeamId] = useState('');
-  const [createResult, setCreateResult] = useState<{ username: string; password: string } | null>(null);
-  const [createCopied, setCreateCopied] = useState(false);
-  const [createError, setCreateError] = useState('');
-  const [createSaving, setCreateSaving] = useState(false);
-  const [customPermissions, setCustomPermissions] = useState<string[]>([]);
-
   // Integration settings (server-side, admin-only)
+  const [pdKey, setPdKey] = useState('');
   const [slackWebhook, setSlackWebhook] = useState('');
   const [slackChannel, setSlackChannel] = useState('#incidents');
   const [slackEnabled, setSlackEnabled] = useState(false);
@@ -82,10 +66,14 @@ export default function Settings() {
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [overrideSaved, setOverrideSaved] = useState(false);
 
-  useEffect(() => {
-    if (!canManageTeams && !canManageUsers) return;
+  const refreshData = () => {
     api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
     api.listUsers().then((u: any) => { if (Array.isArray(u)) setAllUsers(u); }).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (!canManageTeams && !canManageUsers) return;
+    refreshData();
   }, [canManageTeams, canManageUsers]);
 
   useEffect(() => {
@@ -96,12 +84,14 @@ export default function Settings() {
       if (s.jira) { setJiraUrl(s.jira.baseUrl || ''); setJiraProject(s.jira.projectKey || 'INC'); setJiraToken(s.jira.apiToken || ''); setJiraEmail(s.jira.email || ''); setJiraEnabled(!!s.jira.enabled); }
       if (s.opsgenie) { setOpsgenieKey(s.opsgenie.apiKey || ''); setOpsgenieEnabled(!!s.opsgenie.enabled); }
       if (s.ai) { setAiProvider(s.ai.provider || 'openai'); setAiKey(s.ai.apiKey || ''); setAiModel(s.ai.model || 'gpt-4'); setAiEnabled(!!s.ai.enabled); }
+      if (s.pagerduty) { setPdKey(s.pagerduty.routingKey || ''); }
     }).catch(() => {});
   }, [canViewIntegrations]);
 
   const saveIntegrations = async () => {
     setIntSaving(true);
     await api.updateIntegrationSettings({
+      pagerduty: { routingKey: pdKey, autoTriggerSeverities: [] },
       slack: { webhookUrl: slackWebhook, channel: slackChannel, enabled: slackEnabled },
       jira: { baseUrl: jiraUrl, projectKey: jiraProject, apiToken: jiraToken, email: jiraEmail, enabled: jiraEnabled },
       opsgenie: { apiKey: opsgenieKey, enabled: opsgenieEnabled },
@@ -114,17 +104,10 @@ export default function Settings() {
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     updateSettings({ [key]: value });
-    setSaved(false);
-  };
-
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleReset = () => {
     updateSettings(defaults);
-    setSaved(false);
   };
 
   return (
@@ -149,134 +132,27 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Profile */}
-      <Expandable title="Profile" icon={<User className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[13px] font-medium mb-2" style={{ color: 'var(--apple-text-primary)' }}>Display Name</label>
-            {editingName ? (
-              <div className="flex gap-2">
-                <input
-                  value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && nameInput.trim()) {
-                      setSavingName(true);
-                      api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
-                        if (u && !u.error) { updateUser({ displayName: u.displayName }); }
-                        setSavingName(false); setEditingName(false);
-                      });
-                    }
-                    if (e.key === 'Escape') { setEditingName(false); setNameInput(user?.displayName || ''); }
-                  }}
-                  className="apple-input flex-1"
-                  autoFocus
-                />
-                <button
-                  disabled={!nameInput.trim() || savingName}
-                  onClick={() => {
-                    setSavingName(true);
-                    api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
-                      if (u && !u.error) { updateUser({ displayName: u.displayName }); }
-                      setSavingName(false); setEditingName(false);
-                    });
-                  }}
-                  className="apple-btn apple-btn-primary text-[12px]"
-                >{savingName ? 'Saving...' : 'Save'}</button>
-                <button
-                  onClick={() => { setEditingName(false); setNameInput(user?.displayName || ''); }}
-                  className="apple-btn apple-btn-secondary text-[12px]"
-                >Cancel</button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-[14px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{user?.displayName}</span>
-                <button onClick={() => { setNameInput(user?.displayName || ''); setEditingName(true); }}
-                  className="p-1 rounded-[6px] transition-all hover:opacity-70" style={{ color: 'var(--apple-blue)' }} title="Edit display name">
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-          <div style={{ borderTop: '1px solid var(--apple-border)', paddingTop: 16 }}>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--apple-text-tertiary)' }}>Username</label>
-            {editingUsername ? (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <div className="flex items-center flex-1 gap-1">
-                    <span className="text-[13px]" style={{ color: 'var(--apple-text-tertiary)' }}>@</span>
-                    <input
-                      value={usernameInput}
-                      onChange={e => { setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError(''); }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && usernameInput.trim().length >= 3) {
-                          setSavingUsername(true); setUsernameError('');
-                          api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
-                            if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
-                            updateUser({ username: u.username });
-                            setSavingUsername(false); setEditingUsername(false);
-                          });
-                        }
-                        if (e.key === 'Escape') { setEditingUsername(false); setUsernameInput(user?.username || ''); setUsernameError(''); }
-                      }}
-                      className="apple-input flex-1"
-                      autoFocus
-                    />
-                  </div>
-                  <button
-                    disabled={!usernameInput.trim() || usernameInput.trim().length < 3 || savingUsername}
-                    onClick={() => {
-                      setSavingUsername(true); setUsernameError('');
-                      api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
-                        if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
-                        updateUser({ username: u.username });
-                        setSavingUsername(false); setEditingUsername(false);
-                      });
-                    }}
-                    className="apple-btn apple-btn-primary text-[12px]"
-                  >{savingUsername ? 'Saving...' : 'Save'}</button>
-                  <button
-                    onClick={() => { setEditingUsername(false); setUsernameInput(user?.username || ''); setUsernameError(''); }}
-                    className="apple-btn apple-btn-secondary text-[12px]"
-                  >Cancel</button>
-                </div>
-                {usernameError && <p className="text-[11px] font-medium" style={{ color: 'var(--apple-red)' }}>{usernameError}</p>}
-                <p className="text-[10px]" style={{ color: 'var(--apple-text-tertiary)' }}>Lowercase letters, numbers, and underscores only. Min 3 characters.</p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-[13px]" style={{ color: 'var(--apple-text-secondary)' }}>@{user?.username}</span>
-                <button onClick={() => { setUsernameInput(user?.username || ''); setUsernameError(''); setEditingUsername(true); }}
-                  className="p-1 rounded-[6px] transition-all hover:opacity-70" style={{ color: 'var(--apple-blue)' }} title="Edit username">
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-          <div style={{ borderTop: '1px solid var(--apple-border)', paddingTop: 16 }}>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--apple-text-tertiary)' }}>Role</label>
-            <span className="text-[13px] font-semibold capitalize" style={{
-              color: user?.role === 'admin' ? 'var(--apple-purple)' : user?.role === 'responder' ? 'var(--apple-blue)' : 'var(--apple-text-secondary)',
-            }}>{user?.role}</span>
-          </div>
-        </div>
-      </Expandable>
-
-      {/* Team Integrations (admin-only) */}
-      {canViewIntegrations ? (<>
+      {/* Integrations (admin-only) */}
+      {canViewIntegrations ? (
       <Expandable title="Integrations" icon={<Shield className="w-[18px] h-[18px]" style={{ color: 'var(--apple-purple)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-5">
-          <div>
-            <label className="block text-[13px] font-medium mb-2" style={{ color: 'var(--apple-text-primary)' }}>
-              PagerDuty API Key
-            </label>
+        <div className="space-y-6">
+          {/* PagerDuty */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>PagerDuty</p>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <div className="w-2 h-2 rounded-full" style={{ background: 'var(--apple-green)' }} />
+                <span className="text-[11px] font-medium" style={{ color: 'var(--apple-green)' }}>Simulated</span>
+              </div>
+            </div>
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <input
                   type={showKey ? 'text' : 'password'}
-                  value={settings.pagerdutyKey}
-                  onChange={e => update('pagerdutyKey', e.target.value)}
-                  placeholder="Enter your PagerDuty API key..."
+                  value={pdKey}
+                  onChange={e => setPdKey(e.target.value)}
+                  placeholder="PagerDuty API key..."
                   className="w-full px-3.5 py-2.5 rounded-[10px] text-[13px] outline-none transition-all duration-200 focus:ring-2"
                   style={{
                     background: 'var(--apple-surface-2)',
@@ -293,134 +169,119 @@ export default function Settings() {
                 </button>
               </div>
             </div>
-            <p className="text-[11px] mt-1.5" style={{ color: 'var(--apple-text-tertiary)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>
               Used for escalation and incident synchronization. Stored locally in your browser.
             </p>
           </div>
 
-          <div className="pt-2" style={{ borderTop: '1px solid var(--apple-border)' }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>PagerDuty Status</p>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--apple-text-tertiary)' }}>Connection is simulated in this demo</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: 'var(--apple-green)' }} />
-                <span className="text-[12px] font-medium" style={{ color: 'var(--apple-green)' }}>Simulated</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Expandable>
+          <div style={{ borderTop: '1px solid var(--apple-border)' }} />
 
-      <Expandable title="AI Analysis Provider" icon={<Cpu className="w-[18px] h-[18px]" style={{ color: 'var(--apple-teal)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>Enable AI Analysis</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--apple-text-tertiary)' }}>Use OpenAI or Anthropic for root cause analysis</p>
+          {/* AI Analysis */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4" style={{ color: 'var(--apple-teal)', strokeWidth: 1.8 }} />
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>AI Analysis</p>
+              <button onClick={() => setAiEnabled(!aiEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative ml-auto" style={{ background: aiEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
+                <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: aiEnabled ? 20 : 3 }} />
+              </button>
             </div>
-            <button onClick={() => setAiEnabled(!aiEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative" style={{ background: aiEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
-              <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: aiEnabled ? 20 : 3 }} />
-            </button>
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Provider</label>
             <div className="flex gap-2">
               {(['openai', 'anthropic', 'local'] as const).map(p => (
                 <button key={p} onClick={() => setAiProvider(p)} className="text-[12px] font-medium px-3 py-1.5 rounded-[8px] capitalize transition-all" style={{ background: aiProvider === p ? 'var(--apple-blue)' : 'var(--apple-surface-2)', color: aiProvider === p ? 'white' : 'var(--apple-text-tertiary)' }}>{p}</button>
               ))}
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Key</label>
+                <input value={aiKey} onChange={e => setAiKey(e.target.value)} type="password" placeholder="sk-..." className="apple-input w-full" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Model</label>
+                <input value={aiModel} onChange={e => setAiModel(e.target.value)} placeholder="gpt-4" className="apple-input w-full" />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Key</label>
-            <input value={aiKey} onChange={e => setAiKey(e.target.value)} type="password" placeholder="sk-..." className="apple-input w-full" />
+
+          <div style={{ borderTop: '1px solid var(--apple-border)' }} />
+
+          {/* Slack */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Slack className="w-4 h-4" style={{ color: 'var(--apple-yellow)', strokeWidth: 1.8 }} />
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>Slack</p>
+              <button onClick={() => setSlackEnabled(!slackEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative ml-auto" style={{ background: slackEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
+                <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: slackEnabled ? 20 : 3 }} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Webhook URL</label>
+                <input value={slackWebhook} onChange={e => setSlackWebhook(e.target.value)} type="password" placeholder="https://hooks.slack.com/services/..." className="apple-input w-full" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Channel</label>
+                <input value={slackChannel} onChange={e => setSlackChannel(e.target.value)} placeholder="#incidents" className="apple-input w-full" />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Model</label>
-            <input value={aiModel} onChange={e => setAiModel(e.target.value)} placeholder="gpt-4" className="apple-input w-full" />
+
+          <div style={{ borderTop: '1px solid var(--apple-border)' }} />
+
+          {/* Jira */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4" style={{ color: 'var(--apple-blue)', strokeWidth: 1.8 }} />
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>Jira</p>
+              <button onClick={() => setJiraEnabled(!jiraEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative ml-auto" style={{ background: jiraEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
+                <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: jiraEnabled ? 20 : 3 }} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Base URL</label>
+                <input value={jiraUrl} onChange={e => setJiraUrl(e.target.value)} placeholder="https://company.atlassian.net" className="apple-input w-full" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Project Key</label>
+                <input value={jiraProject} onChange={e => setJiraProject(e.target.value)} placeholder="INC" className="apple-input w-full" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Email</label>
+                <input value={jiraEmail} onChange={e => setJiraEmail(e.target.value)} placeholder="you@company.com" className="apple-input w-full" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Token</label>
+                <input value={jiraToken} onChange={e => setJiraToken(e.target.value)} type="password" placeholder="Your Jira API token" className="apple-input w-full" />
+              </div>
+            </div>
           </div>
+
+          <div style={{ borderTop: '1px solid var(--apple-border)' }} />
+
+          {/* OpsGenie */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4" style={{ color: 'var(--apple-red)', strokeWidth: 1.8 }} />
+              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>OpsGenie</p>
+              <button onClick={() => setOpsgenieEnabled(!opsgenieEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative ml-auto" style={{ background: opsgenieEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
+                <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: opsgenieEnabled ? 20 : 3 }} />
+              </button>
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Key</label>
+              <input value={opsgenieKey} onChange={e => setOpsgenieKey(e.target.value)} type="password" placeholder="OpsGenie API key" className="apple-input w-full" />
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--apple-border)', paddingTop: 4 }} />
+
+          {/* Save button */}
+          <button onClick={saveIntegrations} disabled={intSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all duration-200 hover:opacity-90" style={{ background: 'var(--apple-purple)', color: 'white' }}>
+            {intSaved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> {intSaving ? 'Saving...' : 'Save Integrations'}</>}
+          </button>
         </div>
       </Expandable>
-
-      <Expandable title="Slack Integration" icon={<Zap className="w-[18px] h-[18px]" style={{ color: 'var(--apple-yellow)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>Enable Slack Notifications</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--apple-text-tertiary)' }}>Post incident alerts to a Slack channel</p>
-            </div>
-            <button onClick={() => setSlackEnabled(!slackEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative" style={{ background: slackEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
-              <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: slackEnabled ? 20 : 3 }} />
-            </button>
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Webhook URL</label>
-            <input value={slackWebhook} onChange={e => setSlackWebhook(e.target.value)} type="password" placeholder="https://hooks.slack.com/services/..." className="apple-input w-full" />
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Channel</label>
-            <input value={slackChannel} onChange={e => setSlackChannel(e.target.value)} placeholder="#incidents" className="apple-input w-full" />
-          </div>
-        </div>
-      </Expandable>
-
-      <Expandable title="Jira Integration" icon={<Globe className="w-[18px] h-[18px]" style={{ color: 'var(--apple-blue)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>Enable Jira Ticket Creation</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--apple-text-tertiary)' }}>Auto-create Jira issues for incidents</p>
-            </div>
-            <button onClick={() => setJiraEnabled(!jiraEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative" style={{ background: jiraEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
-              <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: jiraEnabled ? 20 : 3 }} />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Base URL</label>
-              <input value={jiraUrl} onChange={e => setJiraUrl(e.target.value)} placeholder="https://company.atlassian.net" className="apple-input w-full" />
-            </div>
-            <div>
-              <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Project Key</label>
-              <input value={jiraProject} onChange={e => setJiraProject(e.target.value)} placeholder="INC" className="apple-input w-full" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>Email</label>
-            <input value={jiraEmail} onChange={e => setJiraEmail(e.target.value)} placeholder="you@company.com" className="apple-input w-full" />
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Token</label>
-            <input value={jiraToken} onChange={e => setJiraToken(e.target.value)} type="password" placeholder="Your Jira API token" className="apple-input w-full" />
-          </div>
-        </div>
-      </Expandable>
-
-      <Expandable title="OpsGenie Integration" icon={<Bell className="w-[18px] h-[18px]" style={{ color: 'var(--apple-red)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>Enable OpsGenie Alerts</p>
-              <p className="text-[11px] mt-0.5" style={{ color: 'var(--apple-text-tertiary)' }}>Create OpsGenie alerts for incidents</p>
-            </div>
-            <button onClick={() => setOpsgenieEnabled(!opsgenieEnabled)} className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative" style={{ background: opsgenieEnabled ? 'var(--apple-green)' : 'var(--apple-surface-3)' }}>
-              <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: opsgenieEnabled ? 20 : 3 }} />
-            </button>
-          </div>
-          <div>
-            <label className="block text-[12px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>API Key</label>
-            <input value={opsgenieKey} onChange={e => setOpsgenieKey(e.target.value)} type="password" placeholder="OpsGenie API key" className="apple-input w-full" />
-          </div>
-        </div>
-      </Expandable>
-
-      <div className="flex items-center gap-3">
-        <button onClick={saveIntegrations} disabled={intSaving} className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all duration-200 hover:opacity-90" style={{ background: 'var(--apple-purple)', color: 'white' }}>
-          {intSaved ? <><Check className="w-4 h-4" /> Integrations Saved</> : <><Save className="w-4 h-4" /> {intSaving ? 'Saving...' : 'Save Integrations'}</>}
-        </button>
-      </div>
-      </>) : (
+      ) : (
         <div className="flex items-center gap-3 px-4 py-3.5 rounded-[12px]" style={{ background: 'var(--apple-surface-2)', border: '1px solid var(--apple-border)' }}>
           <Lock className="w-4 h-4" style={{ color: 'var(--apple-text-tertiary)' }} />
           <p className="text-[13px]" style={{ color: 'var(--apple-text-secondary)' }}>
@@ -621,7 +482,7 @@ export default function Settings() {
                                 jiraProjectKey: overrideJiraProject || undefined,
                                 jiraIssueType: overrideJiraIssueType || undefined,
                                 opsgenieTeamName: overrideOpsgenieTeam || undefined,
-                                opsgeniePriority: overrideOpsgeniePriority || undefined,
+                                opsgeniePriority: (overrideOpsgeniePriority || undefined) as 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | undefined,
                                 pagerdutyEscalationPolicyId: overridePdEscalation || undefined,
                               });
                               setOverrideSaving(false);
@@ -729,278 +590,7 @@ export default function Settings() {
 
       {/* User Management — admin password reset */}
       {canManageUsers && (
-      <Expandable title="User Management" icon={<KeyRound className="w-[18px] h-[18px]" style={{ color: 'var(--apple-orange)', strokeWidth: 1.8 }} />}>
-        <div className="space-y-3">
-          <p className="text-[12px]" style={{ color: 'var(--apple-text-tertiary)' }}>Reset a user's password. A temporary password will be generated — share it with the user. They will be required to set a new password on next login.</p>
-          {/* Create User */}
-          {!showCreateUser && !createResult ? (
-            <button
-              onClick={() => { setShowCreateUser(true); setCreateError(''); setNewTeamId(teams[0]?.id || ''); }}
-              className="flex items-center gap-1.5 text-[12px] font-semibold transition-all hover:opacity-80 px-3 py-2 rounded-[8px]"
-              style={{ background: 'var(--apple-blue)', color: 'white' }}>
-              <UserPlus className="w-3.5 h-3.5" /> Create User
-            </button>
-          ) : createResult ? (
-            <div className="p-4 rounded-[10px] space-y-3" style={{ background: 'var(--apple-surface-2)', border: '1px solid var(--apple-border)' }}>
-              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-green)' }}>User created! Share these credentials:</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-medium w-[70px]" style={{ color: 'var(--apple-text-tertiary)' }}>Username</span>
-                  <code className="text-[12px] font-mono px-2 py-0.5 rounded-[4px]" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-primary)' }}>{createResult.username}</code>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-medium w-[70px]" style={{ color: 'var(--apple-text-tertiary)' }}>Password</span>
-                  <code className="text-[12px] font-mono px-2 py-0.5 rounded-[4px]" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-green)' }}>{createResult.password}</code>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(`Username: ${createResult.username}\nPassword: ${createResult.password}`); setCreateCopied(true); setTimeout(() => setCreateCopied(false), 2000); }}
-                    className="p-1 rounded-[4px] transition-all hover:opacity-70"
-                    style={{ color: createCopied ? 'var(--apple-green)' : 'var(--apple-blue)' }}
-                    title="Copy credentials">
-                    {createCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                </div>
-              </div>
-              <p className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>The user will be asked to change their password on first login.</p>
-              <button onClick={() => { setCreateResult(null); setShowCreateUser(false); }} className="text-[11px] font-medium px-3 py-1.5 rounded-[6px] transition-all hover:opacity-70" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-secondary)' }}>Done</button>
-            </div>
-          ) : (
-            <div className="p-4 rounded-[10px] space-y-3" style={{ background: 'var(--apple-surface-2)', border: '1px solid var(--apple-border)' }}>
-              <p className="text-[13px] font-semibold" style={{ color: 'var(--apple-text-primary)' }}>Create a new user</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Display Name</label>
-                  <input value={newDisplayName} onChange={e => setNewDisplayName(e.target.value)} placeholder="John Doe" className="apple-input w-full text-[12px]" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Username</label>
-                  <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="johndoe" className="apple-input w-full text-[12px]" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Email <span style={{ color: 'var(--apple-text-tertiary)' }}>(optional)</span></label>
-                  <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="john@example.com" className="apple-input w-full text-[12px]" />
-                </div>
-                <div>
-                  <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Role</label>
-                  <select value={newRole} onChange={e => { setNewRole(e.target.value); if (e.target.value !== 'custom') setCustomPermissions([]); }} className="apple-input w-full text-[12px]">
-                    <option value="admin">Admin</option>
-                    <option value="responder">Responder</option>
-                    <option value="viewer">Viewer</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-              </div>
-              {newRole === 'custom' && (
-                <div>
-                  <label className="text-[11px] font-medium mb-1.5 block" style={{ color: 'var(--apple-text-secondary)' }}>Permissions</label>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[
-                      { key: 'incidents:view', label: 'View incidents' },
-                      { key: 'incidents:acknowledge', label: 'Acknowledge incidents' },
-                      { key: 'incidents:resolve', label: 'Resolve incidents' },
-                      { key: 'incidents:assign', label: 'Assign incidents' },
-                      { key: 'incidents:escalate', label: 'Escalate incidents' },
-                      { key: 'incidents:create', label: 'Create incidents' },
-                      { key: 'runbooks:view', label: 'View runbooks' },
-                      { key: 'runbooks:manage', label: 'Manage runbooks' },
-                      { key: 'analytics:view', label: 'View analytics' },
-                      { key: 'teams:view', label: 'View teams' },
-                      { key: 'teams:manage', label: 'Manage teams' },
-                      { key: 'users:view', label: 'View users' },
-                      { key: 'users:manage', label: 'Manage users' },
-                      { key: 'integrations:view', label: 'View integrations' },
-                      { key: 'integrations:manage', label: 'Manage integrations' },
-                      { key: 'audit:view', label: 'View audit log' },
-                    ].map(p => (
-                      <label key={p.key} className="flex items-center gap-1.5 text-[11px] cursor-pointer py-0.5" style={{ color: 'var(--apple-text-secondary)' }}>
-                        <input type="checkbox" checked={customPermissions.includes(p.key)}
-                          onChange={e => {
-                            if (e.target.checked) setCustomPermissions(prev => [...prev, p.key]);
-                            else setCustomPermissions(prev => prev.filter(x => x !== p.key));
-                          }}
-                          className="rounded" style={{ accentColor: 'var(--apple-blue)' }} />
-                        {p.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Add to Team</label>
-                <select value={newTeamId} onChange={e => setNewTeamId(e.target.value)} className="apple-input w-full text-[12px]">
-                  <option value="">No team</option>
-                  {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              {createError && <p className="text-[11px] font-medium" style={{ color: 'var(--apple-red)' }}>{createError}</p>}
-              <div className="flex gap-2">
-                <button
-                  disabled={createSaving || !newUsername || !newDisplayName}
-                  onClick={async () => {
-                    setCreateSaving(true); setCreateError('');
-                    const res = await api.createUser({ username: newUsername, displayName: newDisplayName, role: newRole, email: newEmail || undefined, teamId: newTeamId || undefined, permissions: newRole === 'custom' ? customPermissions : undefined });
-                    setCreateSaving(false);
-                    if (res?.error) { setCreateError(res.error); return; }
-                    setCreateResult({ username: newUsername, password: res.initialPassword });
-                    // Refresh users and teams
-                    api.listUsers().then((u: any) => { if (Array.isArray(u)) setAllUsers(u); }).catch(() => {});
-                    api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
-                    setNewUsername(''); setNewDisplayName(''); setNewEmail(''); setNewRole('responder'); setNewTeamId('');
-                  }}
-                  className="px-3 py-1.5 rounded-[6px] text-[12px] font-semibold transition-all hover:opacity-90 disabled:opacity-30"
-                  style={{ background: 'var(--apple-blue)', color: 'white' }}>
-                  {createSaving ? 'Creating...' : 'Create'}
-                </button>
-                <button onClick={() => { setShowCreateUser(false); setCreateError(''); }} className="px-3 py-1.5 rounded-[6px] text-[12px] font-medium transition-all hover:opacity-70" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-secondary)' }}>Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {allUsers.filter((u: any) => u.id !== user?.id).map((u: any) => {
-            const userTeams = teams.filter((t: any) => (t.members || []).some((m: any) => m.userId === u.id));
-            return (
-            <div key={u.id} className="p-3 rounded-[10px] space-y-2" style={{ background: 'var(--apple-surface-2)' }}>
-              <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-secondary)' }}>
-                  {u.displayName?.charAt(0)?.toUpperCase() || '?'}
-                </div>
-                <div>
-                  <p className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{u.displayName}</p>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>@{u.username} · </span>
-                    <select
-                      value={u.role}
-                      onChange={async (e) => {
-                        const newRole = e.target.value;
-                        if (newRole === 'custom') {
-                          const res = await api.updateUserRole(u.id, newRole, u.permissions || []);
-                          if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, role: newRole, permissions: res.permissions || [] } : x));
-                        } else {
-                          const res = await api.updateUserRole(u.id, newRole);
-                          if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, role: newRole, permissions: undefined } : x));
-                        }
-                      }}
-                      className="text-[11px] font-semibold bg-transparent border-none outline-none cursor-pointer capitalize"
-                      style={{ color: u.role === 'admin' ? 'var(--apple-purple)' : u.role === 'responder' ? 'var(--apple-blue)' : u.role === 'custom' ? 'var(--apple-teal)' : 'var(--apple-text-tertiary)' }}
-                    >
-                      <option value="viewer">viewer</option>
-                      <option value="responder">responder</option>
-                      <option value="admin">admin</option>
-                      <option value="custom">custom</option>
-                    </select>
-                    {userTeams.length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(48, 209, 88, 0.12)', color: 'var(--apple-green)' }}>
-                        {userTeams.map((t: any) => t.name).join(', ')}
-                      </span>
-                    )}
-                    {userTeams.length === 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-tertiary)' }}>
-                        No team
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {resetResult?.userId === u.id ? (
-                  <div className="flex items-center gap-2">
-                    <code className="text-[12px] font-mono px-2 py-1 rounded-[6px]" style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-green)' }}>
-                      {resetResult!.tempPassword}
-                    </code>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(resetResult!.tempPassword);
-                        setResetCopied(true);
-                        setTimeout(() => setResetCopied(false), 2000);
-                      }}
-                      className="p-1.5 rounded-[6px] transition-all hover:opacity-70"
-                      style={{ color: resetCopied ? 'var(--apple-green)' : 'var(--apple-blue)' }}
-                      title="Copy password">
-                      {resetCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
-                    <button
-                      onClick={() => setResetResult(null)}
-                      className="text-[11px] font-medium px-2 py-1 rounded-[6px] transition-all hover:opacity-70"
-                      style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-tertiary)' }}>
-                      Done
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      onClick={async () => {
-                        const res = await api.resetUserPassword(u.id);
-                        if (res?.tempPassword) {
-                          setResetResult({ userId: u.id, tempPassword: res.tempPassword });
-                          setResetCopied(false);
-                        }
-                      }}
-                      className="text-[11px] font-semibold px-3 py-1.5 rounded-[6px] transition-all hover:opacity-80"
-                      style={{ background: 'rgba(255, 159, 10, 0.12)', color: 'var(--apple-orange)' }}>
-                      Reset Password
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Delete user "${u.displayName}" (@${u.username})? This cannot be undone.`)) return;
-                        const res = await api.deleteUser(u.id);
-                        if (res && !res.error) {
-                          setAllUsers(prev => prev.filter(x => x.id !== u.id));
-                          api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
-                        }
-                      }}
-                      className="p-1.5 rounded-[6px] transition-all hover:opacity-70"
-                      style={{ color: 'var(--apple-red)' }}
-                      title="Delete user">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                )}
-              </div>
-              </div>
-              {u.role === 'custom' && (
-                <div className="pt-1">
-                  <p className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--apple-text-secondary)' }}>Permissions</p>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[
-                      { key: 'incidents:view', label: 'View incidents' },
-                      { key: 'incidents:acknowledge', label: 'Acknowledge incidents' },
-                      { key: 'incidents:resolve', label: 'Resolve incidents' },
-                      { key: 'incidents:assign', label: 'Assign incidents' },
-                      { key: 'incidents:escalate', label: 'Escalate incidents' },
-                      { key: 'incidents:create', label: 'Create incidents' },
-                      { key: 'runbooks:view', label: 'View runbooks' },
-                      { key: 'runbooks:manage', label: 'Manage runbooks' },
-                      { key: 'analytics:view', label: 'View analytics' },
-                      { key: 'teams:view', label: 'View teams' },
-                      { key: 'teams:manage', label: 'Manage teams' },
-                      { key: 'users:view', label: 'View users' },
-                      { key: 'users:manage', label: 'Manage users' },
-                      { key: 'integrations:view', label: 'View integrations' },
-                      { key: 'integrations:manage', label: 'Manage integrations' },
-                      { key: 'audit:view', label: 'View audit log' },
-                      { key: 'settings:manage', label: 'Manage settings' },
-                    ].map(p => (
-                      <label key={p.key} className="flex items-center gap-1.5 text-[11px] cursor-pointer py-0.5" style={{ color: 'var(--apple-text-secondary)' }}>
-                        <input type="checkbox" checked={(u.permissions || []).includes(p.key)}
-                          onChange={async (e) => {
-                            const newPerms = e.target.checked
-                              ? [...(u.permissions || []), p.key]
-                              : (u.permissions || []).filter((x: string) => x !== p.key);
-                            const res = await api.updateUserRole(u.id, 'custom', newPerms);
-                            if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, permissions: newPerms } : x));
-                          }}
-                          className="rounded" style={{ accentColor: 'var(--apple-teal)' }} />
-                        {p.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            );
-          })}
-        </div>
-      </Expandable>
+        <UserManagement teams={teams} allUsers={allUsers} onRefresh={refreshData} />
       )}
 
       {/* Notifications */}
@@ -1032,6 +622,119 @@ export default function Settings() {
               <div className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200"
                 style={{ left: settings.notifyOnEscalation ? 20 : 3 }} />
             </button>
+          </div>
+        </div>
+      </Expandable>
+
+      {/* Profile */}
+      <Expandable title="Profile" icon={<User className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />}>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[13px] font-medium mb-2" style={{ color: 'var(--apple-text-primary)' }}>Display Name</label>
+            {editingName ? (
+              <div className="flex gap-2">
+                <input
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && nameInput.trim()) {
+                      setSavingName(true);
+                      api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
+                        if (u && !u.error) { updateUser({ displayName: u.displayName }); }
+                        setSavingName(false); setEditingName(false);
+                      });
+                    }
+                    if (e.key === 'Escape') { setEditingName(false); setNameInput(user?.displayName || ''); }
+                  }}
+                  className="apple-input flex-1"
+                  autoFocus
+                />
+                <button
+                  disabled={!nameInput.trim() || savingName}
+                  onClick={() => {
+                    setSavingName(true);
+                    api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
+                      if (u && !u.error) { updateUser({ displayName: u.displayName }); }
+                      setSavingName(false); setEditingName(false);
+                    });
+                  }}
+                  className="apple-btn apple-btn-primary text-[12px]"
+                >{savingName ? 'Saving...' : 'Save'}</button>
+                <button
+                  onClick={() => { setEditingName(false); setNameInput(user?.displayName || ''); }}
+                  className="apple-btn apple-btn-secondary text-[12px]"
+                >Cancel</button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{user?.displayName}</span>
+                <button onClick={() => { setNameInput(user?.displayName || ''); setEditingName(true); }}
+                  className="p-1 rounded-[6px] transition-all hover:opacity-70" style={{ color: 'var(--apple-blue)' }} title="Edit display name">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{ borderTop: '1px solid var(--apple-border)', paddingTop: 16 }}>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--apple-text-tertiary)' }}>Username</label>
+            {editingUsername ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="flex items-center flex-1 gap-1">
+                    <span className="text-[13px]" style={{ color: 'var(--apple-text-tertiary)' }}>@</span>
+                    <input
+                      value={usernameInput}
+                      onChange={e => { setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')); setUsernameError(''); }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && usernameInput.trim().length >= 3) {
+                          setSavingUsername(true); setUsernameError('');
+                          api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
+                            if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
+                            updateUser({ username: u.username });
+                            setSavingUsername(false); setEditingUsername(false);
+                          });
+                        }
+                        if (e.key === 'Escape') { setEditingUsername(false); setUsernameInput(user?.username || ''); setUsernameError(''); }
+                      }}
+                      className="apple-input flex-1"
+                      autoFocus
+                    />
+                  </div>
+                  <button
+                    disabled={!usernameInput.trim() || usernameInput.trim().length < 3 || savingUsername}
+                    onClick={() => {
+                      setSavingUsername(true); setUsernameError('');
+                      api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
+                        if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
+                        updateUser({ username: u.username });
+                        setSavingUsername(false); setEditingUsername(false);
+                      });
+                    }}
+                    className="apple-btn apple-btn-primary text-[12px]"
+                  >{savingUsername ? 'Saving...' : 'Save'}</button>
+                  <button
+                    onClick={() => { setEditingUsername(false); setUsernameInput(user?.username || ''); setUsernameError(''); }}
+                    className="apple-btn apple-btn-secondary text-[12px]"
+                  >Cancel</button>
+                </div>
+                {usernameError && <p className="text-[11px] font-medium" style={{ color: 'var(--apple-red)' }}>{usernameError}</p>}
+                <p className="text-[10px]" style={{ color: 'var(--apple-text-tertiary)' }}>Lowercase letters, numbers, and underscores only. Min 3 characters.</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[13px]" style={{ color: 'var(--apple-text-secondary)' }}>@{user?.username}</span>
+                <button onClick={() => { setUsernameInput(user?.username || ''); setUsernameError(''); setEditingUsername(true); }}
+                  className="p-1 rounded-[6px] transition-all hover:opacity-70" style={{ color: 'var(--apple-blue)' }} title="Edit username">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{ borderTop: '1px solid var(--apple-border)', paddingTop: 16 }}>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--apple-text-tertiary)' }}>Role</label>
+            <span className="text-[13px] font-semibold capitalize" style={{
+              color: user?.role === 'admin' ? 'var(--apple-purple)' : user?.role === 'responder' ? 'var(--apple-blue)' : 'var(--apple-text-secondary)',
+            }}>{user?.role}</span>
           </div>
         </div>
       </Expandable>
@@ -1119,19 +822,13 @@ export default function Settings() {
         </div>
       </Expandable>
 
-      {/* Action buttons */}
+      {/* Reset preferences */}
       <div className="flex items-center gap-3 pt-2">
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-all duration-200 hover:opacity-90"
-          style={{ background: 'var(--apple-blue)', color: 'white' }}>
-          {saved ? <><Check className="w-4 h-4" /> Saved</> : <><Save className="w-4 h-4" /> Save Settings</>}
-        </button>
         <button
           onClick={handleReset}
           className="flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[13px] font-medium transition-all duration-200 hover:opacity-70"
           style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>
-          Reset to Defaults
+          Reset Preferences to Defaults
         </button>
       </div>
     </div>

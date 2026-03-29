@@ -6,6 +6,8 @@ import { NotificationStore } from '../stores/notification-store';
 import { TeamStore } from '../stores/team-store';
 import { sseEmitter } from '../services/event-emitter';
 import { authMiddleware, requirePermission } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { updateStatusSchema, addCommentSchema, assignTeamSchema } from '../schemas';
 
 export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStore, pagerduty: PagerDutyService, notificationStore: NotificationStore, teamStore: TeamStore): Router {
   const router = Router();
@@ -70,11 +72,8 @@ export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStor
     return res.json(incident);
   });
 
-  router.patch('/:id/status', ...canAck, async (req: Request, res: Response) => {
+  router.patch('/:id/status', ...canAck, validate(updateStatusSchema), async (req: Request, res: Response) => {
     const { status } = req.body;
-    if (!['open', 'acknowledged', 'investigating', 'resolved'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
-    }
     // Verify org ownership before mutation
     const existing = await incidentStore.get(req.params.id);
     if (!existing || (existing as any).orgId !== req.user!.orgId) return res.status(404).json({ error: 'Incident not found' });
@@ -134,9 +133,8 @@ export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStor
     return res.json({ comments });
   });
 
-  router.post('/:id/comments', auth, requirePermission('incidents:view'), async (req: Request, res: Response) => {
+  router.post('/:id/comments', auth, requirePermission('incidents:view'), validate(addCommentSchema), async (req: Request, res: Response) => {
     const { author, text } = req.body;
-    if (!author || !text) return res.status(400).json({ error: 'author and text are required' });
     const checkInc = await incidentStore.get(req.params.id);
     if (!checkInc || (checkInc as any).orgId !== req.user!.orgId) return res.status(404).json({ error: 'Incident not found' });
     const comment = await incidentStore.addComment(req.params.id, author, text);
@@ -167,7 +165,7 @@ export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStor
 
   // --- Team Assignment ---
 
-  router.post('/:id/assign-team', ...canAssign, async (req: Request, res: Response) => {
+  router.post('/:id/assign-team', ...canAssign, validate(assignTeamSchema), async (req: Request, res: Response) => {
     const { teamId } = req.body;
     const incident = await incidentStore.get(req.params.id);
     if (!incident || (incident as any).orgId !== req.user!.orgId) return res.status(404).json({ error: 'Incident not found' });

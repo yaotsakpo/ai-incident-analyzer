@@ -7,6 +7,8 @@ import { UserStore } from '../stores/user-store';
 import { v4 as uuidv4 } from 'uuid';
 import { Incident } from '@incident-analyzer/shared';
 import { authMiddleware, requirePermission } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { analyzeSchema } from '../schemas';
 
 export function analyzeRoutes(
   incidentStore: IncidentStore,
@@ -18,15 +20,9 @@ export function analyzeRoutes(
   const analyzer = new Analyzer();
   const auth = authMiddleware(userStore);
 
-  router.post('/', auth, requirePermission('incidents:create'), async (req: Request, res: Response) => {
+  router.post('/', auth, requirePermission('incidents:create'), validate(analyzeSchema), async (req: Request, res: Response) => {
     try {
       const { logs, errorMessages, context, service, title } = req.body;
-
-      if (!logs && !errorMessages) {
-        return res.status(400).json({
-          error: 'Provide either "logs" (array of log entries) or "errorMessages" (array of strings)',
-        });
-      }
 
       const result = analyzer.analyze({ logs, errorMessages, context });
 
