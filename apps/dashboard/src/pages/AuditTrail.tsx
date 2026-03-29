@@ -33,9 +33,12 @@ export default function AuditTrail() {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   const fetchEntries = useCallback(async (cat?: string) => {
     setLoading(true);
+    setPage(1); // Reset to first page on category change
     try {
       const data = await api.getAuditLog(200, cat || undefined);
       if (data?.entries) setEntries(data.entries);
@@ -53,7 +56,13 @@ export default function AuditTrail() {
       )
     : entries;
 
-  const grouped = filtered.reduce<Record<string, AuditLogEntry[]>>((acc, e) => {
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginatedEntries = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const startEntry = (page - 1) * pageSize + 1;
+  const endEntry = Math.min(page * pageSize, filtered.length);
+
+  const grouped = paginatedEntries.reduce<Record<string, AuditLogEntry[]>>((acc, e) => {
     const day = new Date(e.createdAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     (acc[day] = acc[day] || []).push(e);
     return acc;
@@ -109,6 +118,9 @@ export default function AuditTrail() {
       <div className="flex items-center gap-4">
         <span className="text-[12px] tabular-nums" style={{ color: 'var(--apple-text-tertiary)' }}>
           {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+          {filtered.length > 0 && (
+            <span className="ml-1">(showing {startEntry}-{endEntry})</span>
+          )}
         </span>
         {search && (
           <button onClick={() => setSearch('')} className="text-[11px] font-medium transition-all hover:opacity-70" style={{ color: 'var(--apple-blue)' }}>
@@ -122,7 +134,7 @@ export default function AuditTrail() {
         <div className="flex items-center justify-center py-20">
           <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--apple-surface-3)', borderTopColor: 'var(--apple-blue)' }} />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : paginatedEntries.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--apple-surface-1)' }}>
             <ClipboardList className="w-7 h-7" style={{ color: 'var(--apple-text-tertiary)', strokeWidth: 1.5 }} />
@@ -182,6 +194,23 @@ export default function AuditTrail() {
               </div>
             </div>
           ))}
+
+          {/* Pagination */}
+          {filtered.length > pageSize && (
+            <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: '1px solid var(--apple-border)' }}>
+              <span className="text-[12px] tabular-nums" style={{ color: 'var(--apple-text-tertiary)' }}>
+                {startEntry}–{endEntry} of {filtered.length}
+              </span>
+              <div className="flex gap-1.5">
+                <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
+                  className="text-[12px] font-medium px-3 py-1.5 rounded-[8px] transition-all duration-150 disabled:opacity-30"
+                  style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>Previous</button>
+                <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+                  className="text-[12px] font-medium px-3 py-1.5 rounded-[8px] transition-all duration-150 disabled:opacity-30"
+                  style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>Next</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
