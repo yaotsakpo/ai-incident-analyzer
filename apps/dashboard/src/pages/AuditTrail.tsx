@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ClipboardList, Filter, RefreshCw, Search, User, Shield, Users, Key } from 'lucide-react';
 import { api } from '../api';
+import type { AuditLogEntry } from '../types';
 
 const CATEGORIES = [
   { value: '', label: 'All', icon: ClipboardList, color: 'var(--apple-text-secondary)' },
@@ -28,7 +29,7 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 export default function AuditTrail() {
-  const [entries, setEntries] = useState<any[]>([]);
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
@@ -52,7 +53,7 @@ export default function AuditTrail() {
       )
     : entries;
 
-  const grouped = filtered.reduce<Record<string, any[]>>((acc, e) => {
+  const grouped = filtered.reduce<Record<string, AuditLogEntry[]>>((acc, e) => {
     const day = new Date(e.createdAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     (acc[day] = acc[day] || []).push(e);
     return acc;
@@ -139,7 +140,7 @@ export default function AuditTrail() {
             <div key={day}>
               <h3 className="text-[12px] font-semibold uppercase tracking-wider mb-3 px-1" style={{ color: 'var(--apple-text-tertiary)' }}>{day}</h3>
               <div className="space-y-1">
-                {dayEntries.map((e: any) => {
+                {dayEntries.map((e: AuditLogEntry) => {
                   const color = CAT_COLORS[e.category] || 'var(--apple-text-tertiary)';
                   return (
                     <div key={e.id} className="flex items-start gap-4 px-4 py-3 rounded-[12px] transition-all"

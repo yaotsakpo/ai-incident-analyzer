@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { api } from './api';
 
-type SSEEvent = { type: string; data: any; timestamp: string };
+type SSEEvent = { type: string; data: unknown; timestamp: string };
 type SSEHandler = (event: SSEEvent) => void;
 
 // ---------------------------------------------------------------------------

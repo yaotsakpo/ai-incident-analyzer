@@ -4,6 +4,7 @@ import Expandable from '../components/Expandable';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { api } from '../api';
 import { useSettings } from '../useSettings';
+import type { Incident, SLAMetrics } from '../types';
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: 'var(--apple-red)',
@@ -15,10 +16,10 @@ const SEVERITY_COLORS: Record<string, string> = {
 const STATUS_COLORS = ['var(--apple-red)', 'var(--apple-yellow)', 'var(--apple-blue)', 'var(--apple-green)'];
 
 export default function Analytics() {
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [slaMetrics, setSlaMetrics] = useState<any>(null);
+  const [slaMetrics, setSlaMetrics] = useState<SLAMetrics | null>(null);
   const { settings } = useSettings();
 
   const tooltipStyle = settings.theme === 'dark'
@@ -53,9 +54,9 @@ export default function Analytics() {
   const hasFilters = Object.keys(filters).length > 0;
 
   useEffect(() => {
-    Promise.all([api.listIncidents(), api.getSLAMetrics()]).then(([data, sla]: any[]) => {
+    Promise.all([api.listIncidents(), api.getSLAMetrics()]).then(([data, sla]: [{ incidents?: Incident[] }, { sla?: SLAMetrics }]) => {
       setIncidents(data.incidents || []);
-      setSlaMetrics(sla);
+      setSlaMetrics(sla.sla || null);
       setLoading(false);
     });
   }, []);
@@ -82,10 +83,10 @@ export default function Analytics() {
   }
 
   const filteredIncidents = hasFilters
-    ? incidents.filter((inc: any) => {
-        if (filters.severity && inc.analysis.severity !== filters.severity) return false;
+    ? incidents.filter((inc) => {
+        if (filters.severity && inc.analysis?.severity !== filters.severity) return false;
         if (filters.status && inc.status !== filters.status) return false;
-        if (filters.category && inc.analysis.rootCause.category !== filters.category) return false;
+        if (filters.category && inc.analysis?.rootCause?.category !== filters.category) return false;
         if (filters.service && (inc.service || 'unknown') !== filters.service) return false;
         return true;
       })
@@ -93,12 +94,12 @@ export default function Analytics() {
 
   const severityDist = ['critical', 'high', 'medium', 'low'].map(s => ({
     name: s,
-    value: incidents.filter((i: any) => i.analysis.severity === s).length,
+    value: incidents.filter((i) => i.analysis?.severity === s).length,
   }));
 
   const statusDist = ['open', 'acknowledged', 'investigating', 'resolved'].map(s => ({
     name: s,
-    value: incidents.filter((i: any) => i.status === s).length,
+    value: incidents.filter((i) => i.status === s).length,
   }));
 
   const categoryCounts = new Map<string, number>();
@@ -119,19 +120,19 @@ export default function Analytics() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => ({ name, count }));
 
-  const resolved = incidents.filter((i: any) => i.timeToResolveMs);
+  const resolved = incidents.filter((i) => i.timeToResolveMs);
   const avgTTR = resolved.length > 0
-    ? Math.round(resolved.reduce((sum: number, i: any) => sum + i.timeToResolveMs, 0) / resolved.length / 60000)
+    ? Math.round(resolved.reduce((sum: number, i: Incident) => sum + (i.timeToResolveMs || 0), 0) / resolved.length / 60000)
     : 0;
 
   const avgConfidence = Math.round(
-    incidents.reduce((sum: number, i: any) => sum + i.analysis.confidence, 0) / incidents.length * 100
+    incidents.reduce((sum: number, i: Incident) => sum + (i.analysis?.confidence || 0), 0) / (incidents.length || 1) * 100
   );
 
-  const pdLinked = incidents.filter((i: any) => i.pagerduty).length;
-  const runbookMatched = incidents.filter((i: any) => i.runbook).length;
+  const pdLinked = incidents.filter((i) => i.pagerduty).length;
+  const runbookMatched = incidents.filter((i) => i.runbook).length;
 
-  const renderLabel = ({ name, value }: any) => value > 0 ? `${name}` : '';
+  const renderLabel = ({ name, value }: { name: string; value: number }) => value > 0 ? `${name}` : '';
 
   return (
     <div className="p-8 space-y-8">
@@ -189,7 +190,7 @@ export default function Analytics() {
             <PieChart>
               <Pie data={severityDist} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" strokeWidth={0}
                 label={renderLabel} labelLine={false} cursor="pointer"
-                onClick={(data: any) => data && applyFilter('severity', data.name)}>
+                onClick={(data: { name?: string }) => data && data.name && applyFilter('severity', data.name)}>
                 {severityDist.map((entry) => (
                   <Cell key={entry.name} fill={SEVERITY_COLORS[entry.name]}
                     opacity={filters.severity && filters.severity !== entry.name ? 0.3 : 1}
@@ -207,7 +208,7 @@ export default function Analytics() {
             <PieChart>
               <Pie data={statusDist} cx="50%" cy="50%" innerRadius={55} outerRadius={90} dataKey="value" strokeWidth={0}
                 label={renderLabel} labelLine={false} cursor="pointer"
-                onClick={(data: any) => data && applyFilter('status', data.name)}>
+                onClick={(data: { name?: string }) => data && data.name && applyFilter('status', data.name)}>
                 {statusDist.map((entry, i) => (
                   <Cell key={i} fill={STATUS_COLORS[i]}
                     opacity={filters.status && filters.status !== entry.name ? 0.3 : 1}
@@ -227,7 +228,7 @@ export default function Analytics() {
               <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--apple-text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--apple-surface-1)' }} />
               <Bar dataKey="count" fill="var(--apple-orange)" radius={[0, 6, 6, 0]} barSize={16}
-                cursor="pointer" onClick={(data: any) => data && applyFilter('category', data.name)} />
+                cursor="pointer" onClick={(data: { name?: string }) => data && data.name && applyFilter('category', data.name)} />
             </BarChart>
           </ResponsiveContainer>
         </Expandable>
@@ -240,7 +241,7 @@ export default function Analytics() {
               <YAxis type="category" dataKey="name" width={140} tick={{ fill: 'var(--apple-text-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--apple-surface-1)' }} />
               <Bar dataKey="count" fill="var(--apple-blue)" radius={[0, 6, 6, 0]} barSize={16}
-                cursor="pointer" onClick={(data: any) => data && applyFilter('service', data.name)} />
+                cursor="pointer" onClick={(data: { name?: string }) => data && data.name && applyFilter('service', data.name)} />
             </BarChart>
           </ResponsiveContainer>
         </Expandable>
@@ -275,19 +276,19 @@ export default function Analytics() {
           const totalPages = Math.ceil(filteredIncidents.length / settings.tablePageSize);
           if (page >= totalPages && page > 0) setPage(0);
           // Cross-filter for pills
-          const forSev = filteredIncidents.filter((i: any) => !tableStatusFilter || i.status === tableStatusFilter);
-          const forStatus = filteredIncidents.filter((i: any) => !tableSevFilter || i.analysis.severity === tableSevFilter);
+          const forSev = filteredIncidents.filter((i) => !tableStatusFilter || i.status === tableStatusFilter);
+          const forStatus = filteredIncidents.filter((i) => !tableSevFilter || i.analysis?.severity === tableSevFilter);
           const sevOrder = ['critical', 'high', 'medium', 'low'];
-          const sevs = sevOrder.filter(s => forSev.some((i: any) => i.analysis.severity === s));
-          const statuses = Array.from(new Set(forStatus.map((i: any) => i.status)));
+          const sevs = sevOrder.filter(s => forSev.some((i) => i.analysis?.severity === s));
+          const statuses = Array.from(new Set(forStatus.map((i) => i.status)));
 
           let tableData = filteredIncidents
-            .filter((i: any) => !tableSevFilter || i.analysis.severity === tableSevFilter)
-            .filter((i: any) => !tableStatusFilter || i.status === tableStatusFilter);
+            .filter((i) => !tableSevFilter || i.analysis?.severity === tableSevFilter)
+            .filter((i) => !tableStatusFilter || i.status === tableStatusFilter);
 
           if (sortCol) {
-            tableData = [...tableData].sort((a: any, b: any) => {
-              let va: any, vb: any;
+            tableData = [...tableData].sort((a: Incident, b: Incident) => {
+              let va: string | number | undefined, vb: string | number | undefined;
               switch (sortCol) {
                 case 'title': va = a.title.toLowerCase(); vb = b.title.toLowerCase(); break;
                 case 'service': va = (a.service || '').toLowerCase(); vb = (b.service || '').toLowerCase(); break;
@@ -381,7 +382,7 @@ export default function Analytics() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tableData.slice(page * settings.tablePageSize, (page + 1) * settings.tablePageSize).map((inc: any, idx: number) => (
+                    {tableData.slice(page * settings.tablePageSize, (page + 1) * settings.tablePageSize).map((inc, idx: number) => (
                       <tr key={inc.id} className="transition-colors duration-150"
                         style={{ borderTop: idx > 0 ? '1px solid var(--apple-border)' : 'none' }}>
                         <td className="py-3 pr-4 truncate max-w-[220px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{inc.title}</td>

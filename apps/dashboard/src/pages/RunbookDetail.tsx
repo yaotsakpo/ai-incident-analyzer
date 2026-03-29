@@ -3,15 +3,16 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, Terminal, Clock, Layers, Zap, Tag } from 'lucide-react';
 import { api } from '../api';
 import Expandable from '../components/Expandable';
+import type { Runbook, RunbookStep } from '../types';
 
 export default function RunbookDetail() {
   const { id } = useParams<{ id: string }>();
-  const [runbook, setRunbook] = useState<any>(null);
+  const [runbook, setRunbook] = useState<Runbook | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
-    api.getRunbook(id).then((data: any) => {
+    api.getRunbook(id).then((data: Runbook) => {
       setRunbook(data);
       setLoading(false);
     });
@@ -37,8 +38,8 @@ export default function RunbookDetail() {
     );
   }
 
-  const autoSteps = runbook.steps.filter((s: any) => s.isAutomatable);
-  const manualSteps = runbook.steps.filter((s: any) => !s.isAutomatable);
+  const autoSteps = runbook.steps.filter((s: RunbookStep) => s.isAutomatable);
+  const manualSteps = runbook.steps.filter((s: RunbookStep) => !s.isAutomatable);
 
   return (
     <div className="p-8 space-y-6">
@@ -80,7 +81,7 @@ export default function RunbookDetail() {
       {/* All Steps */}
       <Expandable title="Procedure Steps" icon={<Layers className="w-[18px] h-[18px]" style={{ color: 'var(--apple-text-tertiary)', strokeWidth: 1.8 }} />} count={runbook.steps.length}>
         <div className="space-y-3">
-          {runbook.steps.map((step: any, idx: number) => (
+          {runbook.steps.map((step: RunbookStep, idx: number) => (
             <StepCard key={step.order} step={step} idx={idx} />
           ))}
         </div>
@@ -90,7 +91,7 @@ export default function RunbookDetail() {
       {autoSteps.length > 0 && (
         <Expandable title="Automatable Steps" defaultOpen={false} icon={<Zap className="w-[18px] h-[18px]" style={{ color: 'var(--apple-purple)', strokeWidth: 1.8 }} />} count={autoSteps.length}>
           <div className="space-y-3">
-            {autoSteps.map((step: any) => (
+            {autoSteps.map((step: RunbookStep) => (
               <StepCard key={step.order} step={step} idx={runbook.steps.indexOf(step)} />
             ))}
           </div>
@@ -101,7 +102,7 @@ export default function RunbookDetail() {
       {manualSteps.length > 0 && (
         <Expandable title="Manual Steps" defaultOpen={false} icon={<Layers className="w-[18px] h-[18px]" style={{ color: 'var(--apple-orange)', strokeWidth: 1.8 }} />} count={manualSteps.length}>
           <div className="space-y-3">
-            {manualSteps.map((step: any) => (
+            {manualSteps.map((step: RunbookStep) => (
               <StepCard key={step.order} step={step} idx={runbook.steps.indexOf(step)} />
             ))}
           </div>
@@ -109,10 +110,10 @@ export default function RunbookDetail() {
       )}
 
       {/* Commands Reference */}
-      {runbook.steps.some((s: any) => s.command) && (
-        <Expandable title="Commands Reference" defaultOpen={false} icon={<Terminal className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />} count={runbook.steps.filter((s: any) => s.command).length}>
+      {runbook.steps.some((s: RunbookStep) => s.command) && (
+        <Expandable title="Commands Reference" defaultOpen={false} icon={<Terminal className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />} count={runbook.steps.filter((s: RunbookStep) => s.command).length}>
           <div className="space-y-2">
-            {runbook.steps.filter((s: any) => s.command).map((step: any, i: number) => (
+            {runbook.steps.filter((s: RunbookStep) => s.command).map((step: RunbookStep, i: number) => (
               <div key={i} className="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px]" style={{ background: 'var(--apple-surface-1)' }}>
                 <span className="text-[12px] font-medium shrink-0" style={{ color: 'var(--apple-text-tertiary)' }}>Step {runbook.steps.indexOf(step) + 1}</span>
                 <code className="text-[12px] font-mono flex-1 truncate" style={{ color: 'var(--apple-green)' }}>{step.command}</code>
@@ -125,7 +126,7 @@ export default function RunbookDetail() {
   );
 }
 
-function StepCard({ step, idx }: { step: any; idx: number }) {
+function StepCard({ step, idx }: { step: RunbookStep; idx: number }) {
   return (
     <div className="p-4 rounded-[12px]" style={{ background: 'var(--apple-surface-1)' }}>
       <div className="flex items-start gap-3">

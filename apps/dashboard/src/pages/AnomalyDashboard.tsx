@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, Server, X, GripVertical, Columns, Rows } from 
 import { api } from '../api';
 import Expandable from '../components/Expandable';
 import { useSettings } from '../useSettings';
+import type { Incident } from '../types';
 
 type SummaryFilter = 'active' | 'critical' | 'high' | 'unacked' | null;
 
@@ -14,7 +15,7 @@ const severityStyle: Record<string, { bg: string; color: string; pillBg: string 
 };
 
 export default function AnomalyDashboard() {
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
   const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>(null);
@@ -142,7 +143,7 @@ export default function AnomalyDashboard() {
   }, []);
 
   useEffect(() => {
-    api.listIncidents().then((data: any) => {
+    api.listIncidents().then((data: { incidents?: Incident[] }) => {
       setIncidents(data.incidents || []);
       setLoading(false);
     });
@@ -223,24 +224,24 @@ export default function AnomalyDashboard() {
     );
   }
 
-  const activeIncidents = incidents.filter((i: any) => i.status !== 'resolved');
-  const criticalCount = incidents.filter((i: any) => i.analysis.severity === 'critical').length;
-  const highCount = incidents.filter((i: any) => i.analysis.severity === 'high').length;
-  const openCount = incidents.filter((i: any) => i.status === 'open').length;
+  const activeIncidents = incidents.filter((i) => i.status !== 'resolved');
+  const criticalCount = incidents.filter((i) => i.analysis?.severity === 'critical').length;
+  const highCount = incidents.filter((i) => i.analysis?.severity === 'high').length;
+  const openCount = incidents.filter((i) => i.status === 'open').length;
 
   // Apply filters to get the scoped incident set for patterns + active list
-  const scopedIncidents = incidents.filter((inc: any) => {
+  const scopedIncidents = incidents.filter((inc) => {
     if (serviceFilter && (inc.service || 'unknown') !== serviceFilter) return false;
     if (summaryFilter === 'active' && inc.status === 'resolved') return false;
-    if (summaryFilter === 'critical' && inc.analysis.severity !== 'critical') return false;
-    if (summaryFilter === 'high' && inc.analysis.severity !== 'high') return false;
+    if (summaryFilter === 'critical' && inc.analysis?.severity !== 'critical') return false;
+    if (summaryFilter === 'high' && inc.analysis?.severity !== 'high') return false;
     if (summaryFilter === 'unacked' && inc.status !== 'open') return false;
     return true;
   });
 
   const patternCounts = new Map<string, number>();
   for (const inc of scopedIncidents) {
-    for (const p of inc.analysis.patterns) {
+    for (const p of inc.analysis?.patterns || []) {
       patternCounts.set(p.name, (patternCounts.get(p.name) || 0) + p.occurrences);
     }
   }
@@ -248,7 +249,7 @@ export default function AnomalyDashboard() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
 
-  const scopedActive = scopedIncidents.filter((i: any) => i.status !== 'resolved');
+  const scopedActive = scopedIncidents.filter((i) => i.status !== 'resolved');
 
   const hasFilter = serviceFilter !== null || summaryFilter !== null;
   const filterLabel = [
@@ -475,20 +476,20 @@ export default function AnomalyDashboard() {
                   {(() => {
                     const hasIncFilter = incSevFilter || incStatusFilter;
                     const filtered = scopedActive
-                      .filter((i: any) => !incSevFilter || i.analysis.severity === incSevFilter)
-                      .filter((i: any) => !incStatusFilter || i.status === incStatusFilter);
+                      .filter((i) => !incSevFilter || i.analysis?.severity === incSevFilter)
+                      .filter((i) => !incStatusFilter || i.status === incStatusFilter);
                     // Cross-filter: severity pills from status-filtered, status pills from severity-filtered
                     const forSev = scopedActive
-                      .filter((i: any) => !incStatusFilter || i.status === incStatusFilter);
+                      .filter((i) => !incStatusFilter || i.status === incStatusFilter);
                     const forStatus = scopedActive
-                      .filter((i: any) => !incSevFilter || i.analysis.severity === incSevFilter);
+                      .filter((i) => !incSevFilter || i.analysis?.severity === incSevFilter);
                     const sevOrder = ['critical', 'high', 'medium', 'low'];
-                    const sevs = sevOrder.filter(s => forSev.some((i: any) => i.analysis.severity === s));
-                    const statuses = Array.from(new Set(forStatus.map((i: any) => i.status)));
+                    const sevs = sevOrder.filter(s => forSev.some((i) => i.analysis?.severity === s));
+                    const statuses = Array.from(new Set(forStatus.map((i) => i.status)));
                     const filtered2 = filtered
-                      .sort((a: any, b: any) => {
+                      .sort((a: Incident, b: Incident) => {
                         const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-                        return (order[a.analysis.severity] ?? 4) - (order[b.analysis.severity] ?? 4);
+                        return (order[a.analysis?.severity ?? ''] ?? 4) - (order[b.analysis?.severity ?? ''] ?? 4);
                       });
                     return (
                       <div className="space-y-4">
@@ -536,8 +537,8 @@ export default function AnomalyDashboard() {
                           <p className="text-[13px] py-4 text-center" style={{ color: 'var(--apple-text-tertiary)' }}>No incidents match the selected filters.</p>
                         ) : (
                           <div className="space-y-2">
-                            {filtered2.slice(incPage * settings.tablePageSize, (incPage + 1) * settings.tablePageSize).map((inc: any) => {
-                              const sty = severityStyle[inc.analysis.severity];
+                            {filtered2.slice(incPage * settings.tablePageSize, (incPage + 1) * settings.tablePageSize).map((inc) => {
+                              const sty = severityStyle[inc.analysis?.severity || 'low'];
                               return (
                                 <div key={inc.id} className="p-3.5 rounded-[10px] transition-all duration-200" style={{ background: sty.bg }}>
                                   <div className="flex items-center justify-between">

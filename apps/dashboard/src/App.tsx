@@ -20,6 +20,7 @@ import ForcePasswordChange from './components/ForcePasswordChange';
 import { api } from './api';
 import { useSettings } from './useSettings';
 import { AuthProvider, useAuth } from './useAuth';
+import type { Notification, Incident, Team } from './types';
 
 const navItems = [
   { to: '/', icon: AlertTriangle, label: 'Incidents', badge: 'open' as const, roles: ['admin', 'responder', 'viewer', 'custom'], perm: 'incidents:view' },
@@ -50,13 +51,13 @@ function AppShell() {
   const { settings, updateSettings } = useSettings();
 
   // Notifications
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(() => {
-    api.listNotifications().then((d: any) => {
+    api.listNotifications().then((d: { notifications?: Notification[]; unreadCount?: number }) => {
       setNotifications(d.notifications || []);
       setUnreadCount(d.unreadCount || 0);
     }).catch(() => {});
@@ -78,7 +79,7 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
-    api.listTeams().then((d: any) => {
+    api.listTeams().then((d: { teams?: Team[] }) => {
       const teams = d.teams || [];
       if (teams.length > 0) setTeamName(teams[0].name);
     }).catch(() => {});
@@ -86,11 +87,11 @@ function AppShell() {
 
   useEffect(() => {
     const fetchCounts = () => {
-      api.listIncidents().then((data: any) => {
+      api.listIncidents().then((data: { incidents?: Incident[] }) => {
         const incs = data.incidents || [];
         setCounts({
-          open: incs.filter((i: any) => i.status === 'open').length,
-          critical: incs.filter((i: any) => i.analysis.severity === 'critical' && i.status !== 'resolved').length,
+          open: incs.filter((i) => i.status === 'open').length,
+          critical: incs.filter((i) => i.analysis?.severity === 'critical' && i.status !== 'resolved').length,
         });
       }).catch(() => {});
     };
@@ -360,13 +361,13 @@ function AppShell() {
                   )}
                 </div>
                 <div className="overflow-y-auto flex-1">
-                  {notifications.filter((n: any) => !n.read).length === 0 ? (
+                  {notifications.filter((n) => !n.read).length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12">
                       <Bell className="w-8 h-8 mb-2" style={{ color: 'var(--apple-surface-3)' }} />
                       <p className="text-[13px]" style={{ color: 'var(--apple-text-tertiary)' }}>All caught up!</p>
                     </div>
                   ) : (
-                    notifications.filter((n: any) => !n.read).map((n: any) => (
+                    notifications.filter((n) => !n.read).map((n) => (
                       <button
                         key={n.id}
                         onClick={async () => {

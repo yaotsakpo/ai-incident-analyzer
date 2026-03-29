@@ -166,7 +166,7 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
   });
 
   router.get('/users', auth, requirePermission('users:view'), async (req: Request, res: Response) => {
-    return res.json(await userStore.listUsers(req.user!.orgId));
+    return res.json({ users: await userStore.listUsers(req.user!.orgId) });
   });
 
   // --- Multi-org endpoints ---

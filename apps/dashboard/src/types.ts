@@ -126,6 +126,7 @@ export interface Team {
   orgId: string;
   members: TeamMember[];
   createdAt: string;
+  integrationOverrides?: TeamIntegrationOverrides;
 }
 
 export interface TeamMember {
@@ -144,6 +145,7 @@ export interface AuditLogEntry {
   userId: string;
   username: string;
   action: string;
+  category: string;
   resourceType: string;
   details: string;
   metadata?: Record<string, unknown>;

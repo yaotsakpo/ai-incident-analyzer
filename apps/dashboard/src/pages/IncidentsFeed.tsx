@@ -8,10 +8,11 @@ import { useSettings } from '../useSettings';
 import { useTimeAgo } from '../hooks/useTimeAgo';
 import { useSSE } from '../useSSE';
 import IncidentRow from '../components/IncidentRow';
+import type { Incident, Team } from '../types';
 
-function exportCSV(incidents: any[]) {
+function exportCSV(incidents: Incident[]) {
   const headers = ['ID', 'Title', 'Service', 'Severity', 'Status', 'Category', 'Confidence', 'Created', 'Resolved', 'Time to Resolve (min)'];
-  const rows = incidents.map((inc: any) => [
+  const rows = incidents.map((inc) => [
     inc.id,
     `"${inc.title.replace(/"/g, '""')}"`,
     inc.service || '',
@@ -34,7 +35,7 @@ function exportCSV(incidents: any[]) {
 }
 
 export default function IncidentsFeed() {
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,13 +57,13 @@ export default function IncidentsFeed() {
   });
   const [serviceFilter, setServiceFilter] = useState<string>(searchParams.get('service') || 'all');
   const [teamScope, setTeamScope] = useState<string>(searchParams.get('teamScope') || 'all');
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [dateRange, setDateRange] = useState<string>(searchParams.get('range') || 'all');
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [focusIdx, setFocusIdx] = useState(-1);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [prevCriticalIds, setPrevCriticalIds] = useState<Set<string>>(new Set());
+  const prevCriticalIdsRef = useRef<Set<string>>(new Set());
   const navigate = useNavigate();
   const { toast } = useToast();
   const refreshRef = useRef<ReturnType<typeof setInterval>>();
@@ -70,51 +71,50 @@ export default function IncidentsFeed() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
+    api.listTeams().then((d: { teams?: Team[] }) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
   }, []);
 
   const load = useCallback((silent = false) => {
     if (!silent) setLoading(true);
-    api.listIncidents(teamScope !== 'all' ? teamScope : undefined).then((data: any) => {
+    api.listIncidents(teamScope !== 'all' ? teamScope : undefined).then((data: { incidents?: Incident[] }) => {
       const incs = data.incidents || [];
       setIncidents(incs);
       setLoading(false);
       setLastRefresh(new Date());
 
       // Browser notification for new critical incidents
-      const currentCritIds = new Set<string>(incs.filter((i: any) => i.analysis?.severity === 'critical' && i.status !== 'resolved').map((i: any) => i.id as string));
-      setPrevCriticalIds(prev => {
-        if (prev.size > 0) {
-          const newCrits = Array.from(currentCritIds).filter(id => !prev.has(id));
-          if (newCrits.length > 0 && settings.notifyOnCritical) {
-            toast(`${newCrits.length} new critical incident${newCrits.length > 1 ? 's' : ''}!`, 'error');
-            // Play alert sound
-            try {
-              const ctx = new AudioContext();
-              const playTone = (freq: number, start: number, dur: number) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.18, ctx.currentTime + start);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-                osc.connect(gain).connect(ctx.destination);
-                osc.start(ctx.currentTime + start);
-                osc.stop(ctx.currentTime + start + dur);
-              };
-              playTone(880, 0, 0.15);
-              playTone(1100, 0.18, 0.15);
-              playTone(880, 0.36, 0.2);
-            } catch {}
-            if (Notification.permission === 'granted') {
-              new Notification('Critical Incident', { body: `${newCrits.length} new critical incident(s) detected` });
-            }
+      const currentCritIds = new Set<string>(incs.filter((i) => i.analysis?.severity === 'critical' && i.status !== 'resolved').map((i) => i.id as string));
+      const prevCritIds = prevCriticalIdsRef.current;
+      if (prevCritIds.size > 0) {
+        const newCritIds = Array.from(currentCritIds).filter(id => !prevCritIds.has(id));
+        if (newCritIds.length > 0 && settings.notifyOnCritical) {
+          toast(`${newCritIds.length} new critical incident${newCritIds.length > 1 ? 's' : ''}!`, 'error');
+          // Play alert sound
+          try {
+            const ctx = new AudioContext();
+            const playTone = (freq: number, start: number, dur: number) => {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.value = freq;
+              gain.gain.setValueAtTime(0.18, ctx.currentTime + start);
+              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+              osc.connect(gain).connect(ctx.destination);
+              osc.start(ctx.currentTime + start);
+              osc.stop(ctx.currentTime + start + dur);
+            };
+            playTone(880, 0, 0.15);
+            playTone(1100, 0.18, 0.15);
+            playTone(880, 0.36, 0.2);
+          } catch {}
+          if (Notification.permission === 'granted') {
+            new Notification('Critical Incident', { body: `${newCritIds.length} new critical incident(s) detected` });
           }
         }
-        return currentCritIds;
-      });
+      }
+      prevCriticalIdsRef.current = currentCritIds;
     });
-  }, [toast, teamScope]);
+  }, [toast, teamScope, settings.notifyOnCritical]);
 
   useEffect(() => {
     if (Notification.permission === 'default') {
@@ -165,14 +165,14 @@ export default function IncidentsFeed() {
   // Derive unique services
   const services = useMemo(() => {
     const s = new Set<string>();
-    incidents.forEach((i: any) => { if (i.service) s.add(i.service); });
+    incidents.forEach((i) => { if (i.service) s.add(i.service); });
     return Array.from(s).sort();
   }, [incidents]);
 
   const filtered = useMemo(() => {
     const now = Date.now();
     const rangeMs: Record<string, number> = { '1h': 3600000, '6h': 21600000, '24h': 86400000, '7d': 604800000, '30d': 2592000000 };
-    return incidents.filter((inc: any) => {
+    return incidents.filter((inc) => {
       if (filter !== 'all' && inc.status !== filter) return false;
       if (severityFilter !== 'all' && inc.analysis?.severity !== severityFilter) return false;
       if (serviceFilter !== 'all' && inc.service !== serviceFilter) return false;
@@ -194,14 +194,14 @@ export default function IncidentsFeed() {
 
   const counts = {
     all: incidents.length,
-    open: incidents.filter((i: any) => i.status === 'open').length,
-    acknowledged: incidents.filter((i: any) => i.status === 'acknowledged').length,
-    investigating: incidents.filter((i: any) => i.status === 'investigating').length,
-    resolved: incidents.filter((i: any) => i.status === 'resolved').length,
+    open: incidents.filter((i) => i.status === 'open').length,
+    acknowledged: incidents.filter((i) => i.status === 'acknowledged').length,
+    investigating: incidents.filter((i) => i.status === 'investigating').length,
+    resolved: incidents.filter((i) => i.status === 'resolved').length,
   };
 
   // Live timestamps
-  const dates = useMemo(() => filtered.map((i: any) => i.createdAt), [filtered]);
+  const dates = useMemo(() => filtered.map((i) => i.createdAt), [filtered]);
   const timeAgoMap = useTimeAgo(dates);
 
   // Keyboard shortcuts
@@ -266,7 +266,7 @@ export default function IncidentsFeed() {
   // Bulk actions
   const bulkAck = async () => {
     const ids = [...selected].filter(id => {
-      const inc = incidents.find((i: any) => i.id === id);
+      const inc = incidents.find((i) => i.id === id);
       return inc && inc.status === 'open';
     });
     await Promise.all(ids.map(id => api.updateIncidentStatus(id, 'acknowledged')));
@@ -277,7 +277,7 @@ export default function IncidentsFeed() {
 
   const bulkResolve = async () => {
     const ids = [...selected].filter(id => {
-      const inc = incidents.find((i: any) => i.id === id);
+      const inc = incidents.find((i) => i.id === id);
       return inc && inc.status !== 'resolved';
     });
     await Promise.all(ids.map(id => api.updateIncidentStatus(id, 'resolved')));
@@ -387,7 +387,7 @@ export default function IncidentsFeed() {
             className="apple-input !pr-8 !py-1.5 !text-[12px] appearance-none cursor-pointer" style={{ minWidth: 120 }}>
             <option value="all">All Teams</option>
             <option value="mine">My Teams</option>
-            {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" style={{ color: 'var(--apple-text-tertiary)' }} />
         </div>
@@ -443,7 +443,7 @@ export default function IncidentsFeed() {
 
       {/* Incident list */}
       <div className="space-y-2" ref={listRef}>
-        {paginatedList.map((inc: any, idx: number) => (
+        {paginatedList.map((inc, idx: number) => (
           <IncidentRow
             key={inc.id}
             inc={inc}

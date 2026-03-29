@@ -3,10 +3,11 @@ import { KeyRound, UserPlus, Check, Copy, Trash2 } from 'lucide-react';
 import Expandable from '../Expandable';
 import { useAuth } from '../../useAuth';
 import { api } from '../../api';
+import type { User, Team, Permission } from '../../types';
 
 interface Props {
-  teams: any[];
-  allUsers: any[];
+  teams: Team[];
+  allUsers: User[];
   onRefresh: () => void;
 }
 
@@ -137,7 +138,7 @@ export default function UserManagement({ teams, allUsers: externalUsers, onRefre
               <label className="text-[11px] font-medium mb-1 block" style={{ color: 'var(--apple-text-secondary)' }}>Add to Team</label>
               <select value={newTeamId} onChange={e => setNewTeamId(e.target.value)} className="apple-input w-full text-[12px]">
                 <option value="">No team</option>
-                {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             {createError && <p className="text-[11px] font-medium" style={{ color: 'var(--apple-red)' }}>{createError}</p>}
@@ -162,8 +163,8 @@ export default function UserManagement({ teams, allUsers: externalUsers, onRefre
           </div>
         )}
 
-        {allUsers.filter((u: any) => u.id !== user?.id).map((u: any) => {
-          const userTeams = teams.filter((t: any) => (t.members || []).some((m: any) => m.userId === u.id));
+        {allUsers.filter((u) => u.id !== user?.id).map((u) => {
+          const userTeams = teams.filter((t) => (t.members || []).some((m) => m.userId === u.id));
           return (
           <div key={u.id} className="p-3 rounded-[10px] space-y-2" style={{ background: 'var(--apple-surface-2)' }}>
             <div className="flex items-center justify-between">
@@ -181,10 +182,10 @@ export default function UserManagement({ teams, allUsers: externalUsers, onRefre
                       const role = e.target.value;
                       if (role === 'custom') {
                         const res = await api.updateUserRole(u.id, role, u.permissions || []);
-                        if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, role, permissions: res.permissions || [] } : x));
+                        if (res && !res.error) setAllUsers(prev => prev.map((x) => x.id === u.id ? { ...x, role: role as User['role'], permissions: res.permissions as Permission[] || [] } : x));
                       } else {
                         const res = await api.updateUserRole(u.id, role);
-                        if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, role, permissions: undefined } : x));
+                        if (res && !res.error) setAllUsers(prev => prev.map((x) => x.id === u.id ? { ...x, role: role as User['role'], permissions: undefined } : x));
                       }
                     }}
                     className="text-[11px] font-semibold bg-transparent border-none outline-none cursor-pointer capitalize"
@@ -197,7 +198,7 @@ export default function UserManagement({ teams, allUsers: externalUsers, onRefre
                   </select>
                   {userTeams.length > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(48, 209, 88, 0.12)', color: 'var(--apple-green)' }}>
-                      {userTeams.map((t: any) => t.name).join(', ')}
+                      {userTeams.map((t) => t.name).join(', ')}
                     </span>
                   )}
                   {userTeams.length === 0 && (
@@ -270,13 +271,13 @@ export default function UserManagement({ teams, allUsers: externalUsers, onRefre
                 <div className="grid grid-cols-2 gap-1">
                   {PERMISSIONS.map(p => (
                     <label key={p.key} className="flex items-center gap-1.5 text-[11px] cursor-pointer py-0.5" style={{ color: 'var(--apple-text-secondary)' }}>
-                      <input type="checkbox" checked={(u.permissions || []).includes(p.key)}
+                      <input type="checkbox" checked={(u.permissions || []).includes(p.key as Permission)}
                         onChange={async (e) => {
                           const newPerms = e.target.checked
-                            ? [...(u.permissions || []), p.key]
-                            : (u.permissions || []).filter((x: string) => x !== p.key);
+                            ? [...(u.permissions || []), p.key as Permission]
+                            : (u.permissions || []).filter((x) => x !== p.key);
                           const res = await api.updateUserRole(u.id, 'custom', newPerms);
-                          if (res && !res.error) setAllUsers(prev => prev.map((x: any) => x.id === u.id ? { ...x, permissions: newPerms } : x));
+                          if (res && !res.error) setAllUsers(prev => prev.map((x) => x.id === u.id ? { ...x, permissions: newPerms } : x));
                         }}
                         className="rounded" style={{ accentColor: 'var(--apple-teal)' }} />
                       {p.label}

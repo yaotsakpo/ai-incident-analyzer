@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from './api';
+import type { UserPreferences } from './types';
 
 const STORAGE_KEY = 'app-settings';
 
@@ -40,8 +41,8 @@ export function useSettings() {
     loaded.current = true;
     const token = localStorage.getItem('auth-token');
     if (!token) return;
-    api.getPreferences().then((serverPrefs: any) => {
-      if (serverPrefs && !serverPrefs.error) {
+    api.getPreferences().then((serverPrefs: UserPreferences | { error: string }) => {
+      if (serverPrefs && !('error' in serverPrefs)) {
         const merged = { ...defaults, ...serverPrefs };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
         setSettings(merged);

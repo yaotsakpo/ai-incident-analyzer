@@ -1,6 +1,6 @@
 import React from 'react';
 import { AlertTriangle, Clock, CheckCircle, Search, Database, Shield, Wifi, HardDrive, Zap, Bug, ChevronRight, BookOpen, Bell, Check, CheckSquare, Square } from 'lucide-react';
-import type { IncidentStatus } from '@incident-analyzer/shared';
+import type { Incident, IncidentStatus } from '@incident-analyzer/shared';
 
 const severityStyle: Record<string, { bg: string; color: string }> = {
   critical: { bg: 'rgba(255, 69, 58, 0.12)', color: 'var(--apple-red)' },
@@ -26,7 +26,7 @@ const categoryIcon: Record<string, React.ReactNode> = {
 };
 
 interface IncidentRowProps {
-  inc: any;
+  inc: Incident;
   isFocused: boolean;
   isSelected: boolean;
   timeAgo: string;

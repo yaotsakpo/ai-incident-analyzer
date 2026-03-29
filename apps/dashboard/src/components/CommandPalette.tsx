@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, AlertTriangle, Activity, BarChart3, BookOpen, ArrowRight, Command } from 'lucide-react';
 import { api } from '../api';
+import type { Incident } from '../types';
 
 interface CommandItem {
   id: string;
@@ -16,7 +17,7 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
-  const [incidents, setIncidents] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
@@ -37,7 +38,7 @@ export default function CommandPalette() {
       setQuery('');
       setSelected(0);
       inputRef.current?.focus();
-      api.listIncidents().then((data: any) => setIncidents(data.incidents || []));
+      api.listIncidents().then((data: { incidents?: Incident[] }) => setIncidents(data.incidents || []));
     }
   }, [open]);
 
@@ -54,9 +55,9 @@ export default function CommandPalette() {
   ];
 
   const incidentItems: CommandItem[] = incidents
-    .filter((inc: any) => inc.status !== 'resolved')
+    .filter((inc) => inc.status !== 'resolved')
     .slice(0, 8)
-    .map((inc: any) => ({
+    .map((inc) => ({
       id: `inc-${inc.id}`,
       label: inc.title,
       sublabel: `${inc.analysis.severity} · ${inc.service || 'unknown'} · ${inc.status}`,

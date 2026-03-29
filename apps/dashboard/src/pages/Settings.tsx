@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Palette, Shield, Save, Check, Eye, EyeOff, Slack, Globe, Cpu, Zap, Lock, Users, Plus, Trash2, UserPlus, User, Pencil, KeyRound, Copy } from 'lucide-react';
+import { Bell, Palette, Shield, Save, Check, Eye, EyeOff, Slack, Globe, Cpu, Zap, Lock, Users, Plus, Trash2, UserPlus, User as UserIcon, Pencil, KeyRound, Copy } from 'lucide-react';
 import Expandable from '../components/Expandable';
 import { useSettings, defaults, AppSettings } from '../useSettings';
 import { useAuth } from '../useAuth';
 import { api } from '../api';
 import UserManagement from '../components/settings/UserManagement';
+import type { Team, User, TeamMember, IntegrationSettings } from '../types';
 
 export default function Settings() {
   const { settings, updateSettings } = useSettings();
@@ -46,8 +47,8 @@ export default function Settings() {
   const [intSaved, setIntSaved] = useState(false);
 
   // Team management state (admin-only)
-  const [teams, setTeams] = useState<any[]>([]);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDesc, setNewTeamDesc] = useState('');
   const [addMemberTeamId, setAddMemberTeamId] = useState<string | null>(null);
@@ -67,8 +68,11 @@ export default function Settings() {
   const [overrideSaved, setOverrideSaved] = useState(false);
 
   const refreshData = () => {
-    api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
-    api.listUsers().then((u: any) => { if (Array.isArray(u)) setAllUsers(u); }).catch(() => {});
+    api.listTeams().then((d: { teams?: Team[] }) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
+    api.listUsers().then((u) => {
+      if (Array.isArray(u)) setAllUsers(u);
+      else if ('users' in u && Array.isArray(u.users)) setAllUsers(u.users);
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -78,12 +82,12 @@ export default function Settings() {
 
   useEffect(() => {
     if (!canViewIntegrations) return;
-    api.getIntegrationSettings().then((s: any) => {
-      if (s.error) return;
+    api.getIntegrationSettings().then((s: IntegrationSettings | { error: string }) => {
+      if ('error' in s) return;
       if (s.slack) { setSlackWebhook(s.slack.webhookUrl || ''); setSlackChannel(s.slack.channel || '#incidents'); setSlackEnabled(!!s.slack.enabled); }
       if (s.jira) { setJiraUrl(s.jira.baseUrl || ''); setJiraProject(s.jira.projectKey || 'INC'); setJiraToken(s.jira.apiToken || ''); setJiraEmail(s.jira.email || ''); setJiraEnabled(!!s.jira.enabled); }
       if (s.opsgenie) { setOpsgenieKey(s.opsgenie.apiKey || ''); setOpsgenieEnabled(!!s.opsgenie.enabled); }
-      if (s.ai) { setAiProvider(s.ai.provider || 'openai'); setAiKey(s.ai.apiKey || ''); setAiModel(s.ai.model || 'gpt-4'); setAiEnabled(!!s.ai.enabled); }
+      if (s.ai) { setAiProvider((s.ai.provider as 'openai' | 'anthropic' | 'local') || 'openai'); setAiKey(s.ai.apiKey || ''); setAiModel(s.ai.model || 'gpt-4'); setAiEnabled(!!s.ai.enabled); }
       if (s.pagerduty) { setPdKey(s.pagerduty.routingKey || ''); }
     }).catch(() => {});
   }, [canViewIntegrations]);
@@ -318,7 +322,7 @@ export default function Settings() {
             <p className="text-[12px] py-4 text-center" style={{ color: 'var(--apple-text-tertiary)' }}>No teams yet. Create one above.</p>
           ) : (
             <div className="space-y-3">
-              {teams.map((team: any) => (
+              {teams.map((team) => (
                 <div key={team.id} className="rounded-[10px] p-4 space-y-3" style={{ background: 'var(--apple-surface-2)', border: '1px solid var(--apple-border)' }}>
                   <div className="flex items-center justify-between">
                     <div>
@@ -340,8 +344,8 @@ export default function Settings() {
                   <div>
                     <p className="text-[11px] font-medium mb-1.5" style={{ color: 'var(--apple-text-secondary)' }}>Members ({team.members?.length || 0})</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {(team.members || []).map((m: any) => {
-                        const memberUser = allUsers.find((u: any) => u.id === m.userId);
+                      {(team.members || []).map((m: TeamMember) => {
+                        const memberUser = allUsers.find((u) => u.id === m.userId);
                         return (
                           <div key={m.userId} className="flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px]" style={{ background: 'var(--apple-surface-3)' }}>
                             <span style={{ color: 'var(--apple-text-primary)' }}>{memberUser?.displayName || m.userId}</span>
@@ -352,7 +356,7 @@ export default function Settings() {
                                 value={m.role}
                                 onChange={async (e) => {
                                   const updated = await api.updateTeamMemberRole(team.id, m.userId, e.target.value);
-                                  if (updated && !updated.error) setTeams(prev => prev.map(t => t.id === team.id ? updated : t));
+                                  if (updated && !('error' in updated)) setTeams(prev => prev.map(t => t.id === team.id ? updated as Team : t));
                                 }}
                                 className="font-semibold capitalize bg-transparent border-none outline-none cursor-pointer text-[11px] pr-1"
                                 style={{ color: m.role === 'admin' ? 'var(--apple-blue)' : 'var(--apple-text-tertiary)' }}
@@ -366,7 +370,7 @@ export default function Settings() {
                               <button
                                 onClick={async () => {
                                   const updated = await api.removeTeamMember(team.id, m.userId);
-                                  if (updated && !updated.error) setTeams(prev => prev.map(t => t.id === team.id ? updated : t));
+                                  if (updated && !('error' in updated)) setTeams(prev => prev.map(t => t.id === team.id ? updated as Team : t));
                                 }}
                                 className="ml-0.5 hover:opacity-70" style={{ color: 'var(--apple-red)' }}>×</button>
                             )}
@@ -383,7 +387,7 @@ export default function Settings() {
                         <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--apple-text-secondary)' }}>User</label>
                         <select value={addMemberUserId} onChange={e => setAddMemberUserId(e.target.value)} className="apple-input w-full text-[12px]">
                           <option value="">Select user...</option>
-                          {allUsers.filter((u: any) => !(team.members || []).some((m: any) => m.userId === u.id)).map((u: any) => (
+                          {allUsers.filter((u) => !(team.members || []).some((m) => m.userId === u.id)).map((u) => (
                             <option key={u.id} value={u.id}>{u.displayName} ({u.role})</option>
                           ))}
                         </select>
@@ -489,7 +493,7 @@ export default function Settings() {
                               setOverrideSaved(true);
                               setTimeout(() => setOverrideSaved(false), 2000);
                               // Refresh teams to show updated overrides
-                              api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
+                              api.listTeams().then((d: { teams?: Team[] }) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
                             }}
                             className="px-3 py-1.5 rounded-[6px] text-[11px] font-semibold transition-all hover:opacity-90 disabled:opacity-30"
                             style={{ background: 'var(--apple-purple)', color: 'white' }}>
@@ -510,7 +514,7 @@ export default function Settings() {
                                 setOverrideSlackChannel(''); setOverrideSlackMention(''); setOverrideJiraProject(''); setOverrideJiraIssueType(''); setOverrideOpsgenieTeam(''); setOverrideOpsgeniePriority(''); setOverridePdEscalation('');
                                 setOverrideSaved(true);
                                 setTimeout(() => setOverrideSaved(false), 2000);
-                                api.listTeams().then((d: any) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
+                                api.listTeams().then((d: { teams?: Team[] }) => { if (d.teams) setTeams(d.teams); }).catch(() => {});
                               }}
                               className="px-3 py-1.5 rounded-[6px] text-[11px] font-medium transition-all hover:opacity-70"
                               style={{ color: 'var(--apple-red)' }}>
@@ -627,7 +631,7 @@ export default function Settings() {
       </Expandable>
 
       {/* Profile */}
-      <Expandable title="Profile" icon={<User className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />}>
+      <Expandable title="Profile" icon={<UserIcon className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />}>
         <div className="space-y-4">
           <div>
             <label className="block text-[13px] font-medium mb-2" style={{ color: 'var(--apple-text-primary)' }}>Display Name</label>
@@ -639,8 +643,8 @@ export default function Settings() {
                   onKeyDown={e => {
                     if (e.key === 'Enter' && nameInput.trim()) {
                       setSavingName(true);
-                      api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
-                        if (u && !u.error) { updateUser({ displayName: u.displayName }); }
+                      api.updateProfile({ displayName: nameInput.trim() }).then((u) => {
+                        if (u && !('error' in u)) { updateUser({ displayName: u.displayName }); }
                         setSavingName(false); setEditingName(false);
                       });
                     }
@@ -653,8 +657,8 @@ export default function Settings() {
                   disabled={!nameInput.trim() || savingName}
                   onClick={() => {
                     setSavingName(true);
-                    api.updateProfile({ displayName: nameInput.trim() }).then((u: any) => {
-                      if (u && !u.error) { updateUser({ displayName: u.displayName }); }
+                    api.updateProfile({ displayName: nameInput.trim() }).then((u) => {
+                      if (u && !('error' in u)) { updateUser({ displayName: (u as { displayName: string }).displayName }); }
                       setSavingName(false); setEditingName(false);
                     });
                   }}
@@ -688,9 +692,9 @@ export default function Settings() {
                       onKeyDown={e => {
                         if (e.key === 'Enter' && usernameInput.trim().length >= 3) {
                           setSavingUsername(true); setUsernameError('');
-                          api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
-                            if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
-                            updateUser({ username: u.username });
+                          api.updateProfile({ username: usernameInput.trim() }).then((u) => {
+                            if (u && 'error' in u) { setUsernameError(u.error || 'Error'); setSavingUsername(false); return; }
+                            if (u && !('error' in u)) { updateUser({ username: (u as { username: string }).username }); }
                             setSavingUsername(false); setEditingUsername(false);
                           });
                         }
@@ -704,9 +708,9 @@ export default function Settings() {
                     disabled={!usernameInput.trim() || usernameInput.trim().length < 3 || savingUsername}
                     onClick={() => {
                       setSavingUsername(true); setUsernameError('');
-                      api.updateProfile({ username: usernameInput.trim() }).then((u: any) => {
-                        if (u?.error) { setUsernameError(u.error); setSavingUsername(false); return; }
-                        updateUser({ username: u.username });
+                      api.updateProfile({ username: usernameInput.trim() }).then((u) => {
+                        if (u && 'error' in u) { setUsernameError(u.error || 'Error'); setSavingUsername(false); return; }
+                        if (u && !('error' in u)) { updateUser({ username: (u as { username: string }).username }); }
                         setSavingUsername(false); setEditingUsername(false);
                       });
                     }}

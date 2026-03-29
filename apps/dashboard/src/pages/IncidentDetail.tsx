@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, CheckCircle, Copy, ExternalLink, BookOpen, Terminal, Shield, Check, Share, Clock, Bell, Search as SearchIcon, MessageSquare, Send, User, Users, History, FileText } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, CheckCircle, Copy, ExternalLink, BookOpen, Terminal, Shield, Check, Share, Clock, Bell, Search as SearchIcon, MessageSquare, Send, User as UserIcon, Users, History, FileText } from 'lucide-react';
 import { api } from '../api';
 import { useToast } from '../components/Toast';
 import { useAuth } from '../useAuth';
 import { formatTimeAgo } from '../hooks/useTimeAgo';
 import Expandable from '../components/Expandable';
 import { useSSE } from '../useSSE';
+import type { Incident, Runbook, Team, User, AuditEntry, Comment, Pattern } from '../types';
 
 const severityStyle: Record<string, { bg: string; color: string }> = {
   critical: { bg: 'rgba(255, 69, 58, 0.12)', color: 'var(--apple-red)' },
@@ -32,12 +33,12 @@ const statusStyle: Record<string, { color: string; bg: string; label: string }> 
 
 export default function IncidentDetail() {
   const { id } = useParams<{ id: string }>();
-  const [incident, setIncident] = useState<any>(null);
-  const [runbook, setRunbook] = useState<any>(null);
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const [runbook, setRunbook] = useState<Runbook | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [commentAuthor] = useState(() => localStorage.getItem('comment-author') || 'On-Call Engineer');
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -50,20 +51,25 @@ export default function IncidentDetail() {
   const canEscalate = hasPerm('incidents:escalate');
 
   // Team assignment
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [teamDropdownOpen, setTeamDropdownOpen] = useState(false);
   const [assigningTeam, setAssigningTeam] = useState(false);
   const teamRef = useRef<HTMLDivElement>(null);
 
   // @mention autocomplete
-  const [mentionUsers, setMentionUsers] = useState<any[]>([]);
+  const [mentionUsers, setMentionUsers] = useState<User[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
   const [mentionStart, setMentionStart] = useState(0);
 
   useEffect(() => {
-    api.listUsers().then((u: any) => { if (Array.isArray(u)) setMentionUsers(u); }).catch(() => {});
-    api.listTeams().then((data: any) => { if (Array.isArray(data)) setTeams(data); else if (data?.teams) setTeams(data.teams); }).catch(() => {});
+    api.listUsers().then((u: { users?: User[] } | User[]) => {
+      if (Array.isArray(u)) setMentionUsers(u);
+      else if ('users' in u && Array.isArray(u.users)) setMentionUsers(u.users);
+    }).catch(() => {});
+    api.listTeams().then((data: { teams?: Team[] }) => {
+      if (data?.teams) setTeams(data.teams);
+    }).catch(() => {});
   }, []);
 
   // Close team dropdown on outside click
@@ -108,7 +114,7 @@ export default function IncidentDetail() {
     }
   };
 
-  const insertMention = (user: any) => {
+  const insertMention = (user: User) => {
     const before = commentText.slice(0, mentionStart);
     const after = commentText.slice((commentInputRef.current?.selectionStart || mentionStart) );
     // Find end of current mention query
@@ -138,11 +144,11 @@ export default function IncidentDetail() {
 
   const load = () => {
     if (!id) return;
-    api.getIncident(id).then((data: any) => {
+    api.getIncident(id).then((data: Incident) => {
       setIncident(data);
       setComments(data.comments || []);
       if (data.runbook?.runbookId) {
-        api.getRunbook(data.runbook.runbookId).then((rb: any) => setRunbook(rb));
+        api.getRunbook(data.runbook.runbookId).then((rb: Runbook) => setRunbook(rb));
       }
       setLoading(false);
     });
@@ -152,11 +158,17 @@ export default function IncidentDetail() {
 
   // SSE: live-update comments and incident status
   useSSE((event) => {
-    if (event.type === 'incident:commented' && event.data?.incidentId === id) {
-      setComments(prev => [...prev, event.data.comment]);
+    if (event.type === 'incident:commented') {
+      const data = event.data as { incidentId?: string; comment?: Comment } | undefined;
+      if (data?.incidentId === id) {
+        setComments(prev => [...prev, data?.comment as Comment]);
+      }
     }
-    if (event.type === 'incident:updated' && event.data?.id === id) {
-      setIncident(event.data);
+    if (event.type === 'incident:updated') {
+      const data = event.data as { id?: string } | undefined;
+      if (data?.id === id) {
+        setIncident(event.data as Incident);
+      }
     }
   });
 
@@ -202,9 +214,8 @@ export default function IncidentDetail() {
   };
 
   const exportPDF = () => {
-    if (!incident) return;
-    const a = incident.analysis || {} as any;
-    if (!a.severity) return;
+    if (!incident?.analysis) return;
+    const a = incident.analysis;
     const html = `<!DOCTYPE html><html><head><title>Incident Report - ${incident.id}</title>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#1c1c1e}
 h1{font-size:22px;margin-bottom:4px}h2{font-size:16px;margin-top:28px;border-bottom:1px solid #e5e5ea;padding-bottom:6px}
@@ -220,8 +231,8 @@ ul{padding-left:20px}li{margin-bottom:4px;font-size:13px}.footer{margin-top:40px
 <table><tr><th>Category</th><td>${a.rootCause.category}</td></tr><tr><th>Description</th><td>${a.rootCause.description}</td></tr></table>
 <p style="font-size:13px;margin-top:8px"><strong>Evidence:</strong></p><ul>${a.rootCause.evidence.map((e: string) => `<li>${e}</li>`).join('')}</ul>
 <h2>Recommendations</h2><ul>${a.recommendations.map((r: string) => `<li>${r}</li>`).join('')}</ul>
-${incident.comments?.length ? `<h2>Activity (${incident.comments.length})</h2>${incident.comments.map((c: any) => `<p><strong>${c.author}</strong> <span class="meta">${new Date(c.createdAt).toLocaleString()}</span><br/>${c.text}</p>`).join('')}` : ''}
-${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>Action</th><th>Details</th><th>Time</th></tr>${incident.auditLog.map((e: any) => `<tr><td>${e.username}</td><td>${e.action}</td><td>${e.fromValue ? e.fromValue + ' → ' + e.toValue : e.details || ''}</td><td>${new Date(e.timestamp).toLocaleString()}</td></tr>`).join('')}</table>` : ''}
+${incident.comments?.length ? `<h2>Activity (${incident.comments.length})</h2>${incident.comments.map((c: Comment) => `<p><strong>${c.author}</strong> <span class="meta">${new Date(c.createdAt).toLocaleString()}</span><br/>${c.text}</p>`).join('')}` : ''}
+${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>Action</th><th>Details</th><th>Time</th></tr>${incident.auditLog.map((e: AuditEntry) => `<tr><td>${e.username}</td><td>${e.action}</td><td>${e.fromValue ? e.fromValue + ' → ' + e.toValue : e.details || ''}</td><td>${new Date(e.timestamp).toLocaleString()}</td></tr>`).join('')}</table>` : ''}
 <div class="footer">Generated ${new Date().toLocaleString()} &bull; AI Incident Analyzer</div></body></html>`;
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
@@ -231,7 +242,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
 
   const copySummary = () => {
     if (!incident) return;
-    const a = incident.analysis || {} as any;
+    const a = incident.analysis;
     const text = [
       `🚨 ${incident.title}`,
       `Status: ${incident.status} | Severity: ${a?.severity || 'unknown'}`,
@@ -264,7 +275,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
     );
   }
 
-  const a = incident.analysis || {} as any;
+  const a = incident.analysis;
   const completedSteps = incident.runbook?.completedSteps || [];
   const sev = severityStyle[a?.severity] || severityStyle['medium'];
   const stat = statusStyle[incident.status];
@@ -327,7 +338,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
                 {teams.length === 0 && (
                   <p className="px-3 py-3 text-[12px]" style={{ color: 'var(--apple-text-tertiary)' }}>No teams available</p>
                 )}
-                {teams.map((t: any) => (
+                {teams.map((t) => (
                   <button key={t.id}
                     onClick={() => handleAssignTeam(t.id)}
                     disabled={assigningTeam}
@@ -404,7 +415,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
               events.push({ time: incident.createdAt, label: `Runbook matched — ${runbook?.name || 'Loading...'}`, icon: <BookOpen className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-purple)' });
             }
             if (incident.pagerduty) {
-              events.push({ time: incident.pagerduty.escalatedAt || incident.createdAt, label: `Escalated to PagerDuty — ${incident.pagerduty.incidentId}`, icon: <Bell className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-green)' });
+              events.push({ time: incident.pagerduty.triggeredAt || incident.createdAt, label: `Escalated to PagerDuty — ${incident.pagerduty.incidentId}`, icon: <Bell className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-green)' });
             }
             if (incident.status === 'acknowledged') {
               events.push({ time: incident.updatedAt || incident.createdAt, label: 'Incident acknowledged', icon: <Clock className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-yellow)' });
@@ -504,7 +515,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
       {(a?.patterns?.length || 0) > 0 && (
         <Expandable title="Detected Patterns" icon={<AlertTriangle className="w-[18px] h-[18px]" style={{ color: 'var(--apple-orange)', strokeWidth: 1.8 }} />} count={a.patterns.length} defaultOpen={false}>
           <div className="grid gap-3 md:grid-cols-2">
-            {(a?.patterns || []).map((p: any, i: number) => (
+            {(a?.patterns || []).map((p: Pattern, i: number) => (
               <div key={i} className="p-3.5 rounded-[10px]" style={{ background: 'var(--apple-surface-2)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[14px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{p.name}</span>
@@ -549,7 +560,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
             </div>
 
             <div className="space-y-2">
-              {runbook.steps.map((step: any) => {
+              {runbook.steps.map((step) => {
                 const completed = completedSteps.includes(step.order);
                 return (
                   <div key={step.order} className="p-4 rounded-[12px] transition-all duration-200"
@@ -617,12 +628,12 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
       {incident.auditLog && incident.auditLog.length > 0 && (
         <Expandable title="Audit Trail" icon={<History className="w-[18px] h-[18px]" style={{ color: 'var(--apple-yellow)', strokeWidth: 1.8 }} />}>
           <div className="space-y-2">
-            {incident.auditLog.map((entry: any) => (
+            {incident.auditLog.map((entry: AuditEntry) => (
               <div key={entry.id} className="flex items-start gap-3 py-2" style={{ borderBottom: '1px solid var(--apple-border)' }}>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: entry.action === 'status_change' ? 'rgba(10, 132, 255, 0.12)' : entry.action === 'commented' ? 'rgba(48, 209, 88, 0.12)' : 'var(--apple-surface-2)' }}>
                   {entry.action === 'status_change' ? <Clock className="w-3 h-3" style={{ color: 'var(--apple-blue)' }} /> :
                    entry.action === 'commented' ? <MessageSquare className="w-3 h-3" style={{ color: 'var(--apple-green)' }} /> :
-                   <User className="w-3 h-3" style={{ color: 'var(--apple-text-tertiary)' }} />}
+                   <UserIcon className="w-3 h-3" style={{ color: 'var(--apple-text-tertiary)' }} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2 flex-wrap">
@@ -660,10 +671,10 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
 
         {comments.length > 0 && (
           <div className="space-y-3 mb-4 max-h-[400px] overflow-y-auto">
-            {comments.map((c: any) => (
+            {comments.map((c: Comment) => (
               <div key={c.id} className="flex gap-3">
                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'var(--apple-surface-2)' }}>
-                  <User className="w-3.5 h-3.5" style={{ color: 'var(--apple-text-tertiary)', strokeWidth: 1.8 }} />
+                  <UserIcon className="w-3.5 h-3.5" style={{ color: 'var(--apple-text-tertiary)', strokeWidth: 1.8 }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
@@ -701,7 +712,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
             {mentionQuery !== null && mentionFiltered.length > 0 && (
               <div className="absolute bottom-full left-0 mb-1 w-64 rounded-[10px] overflow-hidden shadow-lg z-50 backdrop-blur-none"
                 style={{ background: 'var(--apple-bg)', border: '1px solid var(--apple-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
-                {mentionFiltered.map((u: any, i: number) => (
+                {mentionFiltered.map((u, i: number) => (
                   <button
                     key={u.id}
                     onMouseDown={e => { e.preventDefault(); insertMention(u); }}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart3, Clock, AlertTriangle, Shield, Activity, Layers, GripVertical, RotateCcw, CheckCircle } from 'lucide-react';
 import { api } from '../api';
+import type { Incident, SLAMetrics } from '../types';
 
 type WidgetId = 'open_incidents' | 'mttr' | 'sla_status' | 'severity_breakdown' | 'top_services' | 'recent_activity';
 
@@ -46,16 +47,16 @@ function formatMs(ms: number | null | undefined): string {
 
 export default function CustomDashboard() {
   const [layout, setLayout] = useState<WidgetId[]>(loadLayout);
-  const [incidents, setIncidents] = useState<any[]>([]);
-  const [sla, setSla] = useState<any>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [sla, setSla] = useState<SLAMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const dragItem = useRef<number | null>(null);
   const dragOver = useRef<number | null>(null);
 
   useEffect(() => {
     Promise.all([
-      api.listIncidents().then((d: any) => setIncidents(d.incidents || [])),
-      api.getSLAMetrics().then((d: any) => setSla(d)).catch(() => {}),
+      api.listIncidents().then((d: { incidents?: Incident[] }) => setIncidents(d.incidents || [])),
+      api.getSLAMetrics().then((d: { sla?: SLAMetrics }) => setSla(d.sla || null)).catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -137,6 +138,7 @@ export default function CustomDashboard() {
                 <p className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>Resolved today</p>
                 <p className="text-[18px] font-bold tabular-nums" style={{ color: 'var(--apple-green)' }}>
                   {resolvedIncidents.filter(i => {
+                    if (!i.resolvedAt) return false;
                     const d = new Date(i.resolvedAt);
                     const now = new Date();
                     return d.toDateString() === now.toDateString();

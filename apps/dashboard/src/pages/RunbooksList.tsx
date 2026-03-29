@@ -4,9 +4,10 @@ import { BookOpen, Clock, Layers, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import { useSettings } from '../useSettings';
 import { useAuth } from '../useAuth';
+import type { Runbook } from '../types';
 
 export default function RunbooksList() {
-  const [runbooks, setRunbooks] = React.useState<any[]>([]);
+  const [runbooks, setRunbooks] = React.useState<Runbook[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [catFilter, setCatFilter] = React.useState<string | null>(null);
   const [tagFilter, setTagFilter] = React.useState<string | null>(null);
@@ -55,11 +56,11 @@ export default function RunbooksList() {
 
   const addStep = () => setRbSteps(prev => [...prev, { title: '', description: '', command: '', expectedOutcome: '', isAutomatable: false }]);
   const removeStep = (idx: number) => setRbSteps(prev => prev.filter((_, i) => i !== idx));
-  const updateStep = (idx: number, field: string, value: any) => setRbSteps(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  const updateStep = (idx: number, field: string, value: string | boolean) => setRbSteps(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
 
   React.useEffect(() => {
     import('../api').then(({ api }) =>
-      api.listRunbooks().then((data: any) => {
+      api.listRunbooks().then((data: { runbooks?: Runbook[] }) => {
         setRunbooks(data.runbooks || []);
         setLoading(false);
       })
@@ -87,14 +88,14 @@ export default function RunbooksList() {
   const hasFilter = catFilter || tagFilter;
 
   // Cross-filter: categories from tag-filtered, tags from category-filtered
-  const forCat = runbooks.filter((rb: any) => !tagFilter || rb.tags.includes(tagFilter));
-  const forTag = runbooks.filter((rb: any) => !catFilter || rb.category === catFilter);
-  const categories = Array.from(new Set(forCat.map((rb: any) => rb.category)));
-  const allTags = Array.from(new Set(forTag.flatMap((rb: any) => rb.tags || []))).sort();
+  const forCat = runbooks.filter((rb) => !tagFilter || rb.tags?.includes(tagFilter));
+  const forTag = runbooks.filter((rb) => !catFilter || rb.category === catFilter);
+  const categories = Array.from(new Set(forCat.map((rb) => rb.category)));
+  const allTags = Array.from(new Set(forTag.flatMap((rb) => rb.tags || []))).sort();
 
   const filtered = runbooks
-    .filter((rb: any) => !catFilter || rb.category === catFilter)
-    .filter((rb: any) => !tagFilter || rb.tags.includes(tagFilter));
+    .filter((rb) => !catFilter || rb.category === catFilter)
+    .filter((rb) => !tagFilter || rb.tags?.includes(tagFilter));
 
   return (
     <div className="p-8">
@@ -182,7 +183,7 @@ export default function RunbooksList() {
 
       {/* Filter pills */}
       <div className="flex flex-wrap items-center gap-1.5 mb-6">
-        {categories.map((c: string) => {
+        {categories.map((c) => {
           const active = catFilter === c;
           return (
             <button key={c} onClick={() => setCatFilter(active ? null : c)}
@@ -196,7 +197,7 @@ export default function RunbooksList() {
           );
         })}
         <span className="w-px h-4 mx-1" style={{ background: 'var(--apple-surface-3)' }} />
-        {allTags.map((t: string) => {
+        {allTags.map((t) => {
           const active = tagFilter === t;
           return (
             <button key={t} onClick={() => setTagFilter(active ? null : t)}
@@ -222,7 +223,7 @@ export default function RunbooksList() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.slice(rbPage * settings.tablePageSize, (rbPage + 1) * settings.tablePageSize).map((rb: any) => (
+        {filtered.slice(rbPage * settings.tablePageSize, (rbPage + 1) * settings.tablePageSize).map((rb) => (
           <div key={rb.id} className="apple-card apple-card-hover cursor-pointer space-y-3 relative group" onClick={() => navigate(`/runbooks/${rb.id}`)}>
             {canManageRunbooks && (
               <button onClick={(e) => handleDelete(rb.id, e)}
@@ -241,7 +242,7 @@ export default function RunbooksList() {
               <span className="flex items-center gap-1"><Clock className="w-3 h-3" />~{rb.estimatedTimeMinutes}min</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {rb.tags.slice(0, 4).map((t: string) => (
+              {rb.tags?.slice(0, 4).map((t) => (
                 <span key={t} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-tertiary)' }}>{t}</span>
               ))}
             </div>

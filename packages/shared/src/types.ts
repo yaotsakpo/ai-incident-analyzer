@@ -342,6 +342,13 @@ export interface SLAMetrics {
   slaBreaches: number;
   totalResolved: number;
   totalAcknowledged: number;
+  // Dashboard aliases
+  averageAckMs?: number;
+  averageResolveMs?: number;
+  p95AckMs?: number;
+  p95ResolveMs?: number;
+  breaches?: number;
+  totalIncidents?: number;
 }
 
 // --- Alert Group ---
