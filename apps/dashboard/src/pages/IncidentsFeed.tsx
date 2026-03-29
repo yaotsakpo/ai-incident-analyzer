@@ -66,6 +66,8 @@ export default function IncidentsFeed() {
   const { isRole, hasPerm } = useAuth();
   const isAdmin = isRole('admin');
   const canSeed = hasPerm('settings:manage');
+  const canAck = hasPerm('incidents:acknowledge');
+  const canResolve = hasPerm('incidents:resolve');
   const [severityFilter, setSeverityFilter] = useState<string>(() => {
     return searchParams.get('severity') || (() => {
       try {
@@ -239,7 +241,7 @@ export default function IncidentsFeed() {
       } else if (e.key === 'Enter' && focusIdx >= 0 && filtered[focusIdx]) {
         e.preventDefault();
         navigate(`/incidents/${filtered[focusIdx].id}`);
-      } else if (e.key === 'a' && focusIdx >= 0 && filtered[focusIdx]) {
+      } else if (e.key === 'a' && canAck && focusIdx >= 0 && filtered[focusIdx]) {
         const inc = filtered[focusIdx];
         if (inc.status === 'open') {
           api.updateIncidentStatus(inc.id, 'acknowledged').then(() => {
@@ -247,7 +249,7 @@ export default function IncidentsFeed() {
             load(true);
           });
         }
-      } else if (e.key === 'r' && focusIdx >= 0 && filtered[focusIdx]) {
+      } else if (e.key === 'r' && canResolve && focusIdx >= 0 && filtered[focusIdx]) {
         const inc = filtered[focusIdx];
         if (inc.status !== 'resolved') {
           api.updateIncidentStatus(inc.id, 'resolved').then(() => {
@@ -437,8 +439,8 @@ export default function IncidentsFeed() {
         </button>
         <div className="text-[11px] flex items-center gap-3" style={{ color: 'var(--apple-text-tertiary)' }}>
           <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>j</kbd><kbd className="px-1 py-0.5 rounded ml-0.5" style={{ background: 'var(--apple-surface-2)' }}>k</kbd> navigate</span>
-          <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>a</kbd> ack</span>
-          <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>r</kbd> resolve</span>
+          {canAck && <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>a</kbd> ack</span>}
+          {canResolve && <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>r</kbd> resolve</span>}
           <span><kbd className="px-1 py-0.5 rounded" style={{ background: 'var(--apple-surface-2)' }}>x</kbd> select</span>
         </div>
       </div>
@@ -449,12 +451,12 @@ export default function IncidentsFeed() {
           <span className="text-[13px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>
             {selected.size} selected
           </span>
-          <button onClick={bulkAck} className="apple-btn" style={{ background: 'rgba(255, 214, 10, 0.12)', color: 'var(--apple-yellow)', padding: '5px 12px', fontSize: 12 }}>
+          {canAck && <button onClick={bulkAck} className="apple-btn" style={{ background: 'rgba(255, 214, 10, 0.12)', color: 'var(--apple-yellow)', padding: '5px 12px', fontSize: 12 }}>
             Acknowledge All
-          </button>
-          <button onClick={bulkResolve} className="apple-btn apple-btn-success" style={{ padding: '5px 12px', fontSize: 12 }}>
+          </button>}
+          {canResolve && <button onClick={bulkResolve} className="apple-btn apple-btn-success" style={{ padding: '5px 12px', fontSize: 12 }}>
             Resolve All
-          </button>
+          </button>}
           <button onClick={() => setSelected(new Set())} className="apple-btn apple-btn-secondary" style={{ padding: '5px 12px', fontSize: 12 }}>
             Clear
           </button>
@@ -520,20 +522,20 @@ export default function IncidentsFeed() {
                   </div>
                   <div className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>{inc.analysis.analyzedLogs} logs</div>
                 </div>
-                {inc.status !== 'resolved' && (
+                {inc.status !== 'resolved' && (canAck || canResolve) && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {inc.status === 'open' && (
+                    {inc.status === 'open' && canAck && (
                       <button onClick={(e) => quickAction(e, inc.id, 'acknowledged', 'Acknowledged')}
                         className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:scale-110"
                         style={{ background: 'rgba(255, 214, 10, 0.15)' }} title="Acknowledge (a)">
                         <Clock className="w-3.5 h-3.5" style={{ color: 'var(--apple-yellow)', strokeWidth: 2 }} />
                       </button>
                     )}
-                    <button onClick={(e) => quickAction(e, inc.id, 'resolved', 'Resolved')}
+                    {canResolve && <button onClick={(e) => quickAction(e, inc.id, 'resolved', 'Resolved')}
                       className="w-7 h-7 rounded-full flex items-center justify-center transition-all hover:scale-110"
                       style={{ background: 'rgba(48, 209, 88, 0.15)' }} title="Resolve (r)">
                       <Check className="w-3.5 h-3.5" style={{ color: 'var(--apple-green)', strokeWidth: 2.5 }} />
-                    </button>
+                    </button>}
                   </div>
                 )}
                 <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--apple-text-tertiary)', strokeWidth: 1.8 }} />

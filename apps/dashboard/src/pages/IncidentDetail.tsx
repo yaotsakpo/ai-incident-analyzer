@@ -307,13 +307,15 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
           </button>
 
           {/* Team tag */}
+          {(canAssign || incident.assignedTeamId) && (
           <div ref={teamRef} className="relative">
             <button
               onClick={() => canAssign && setTeamDropdownOpen(p => !p)}
-              className="apple-pill cursor-pointer transition-all duration-200 hover:opacity-70"
+              className="apple-pill transition-all duration-200 hover:opacity-70"
               style={{
                 background: incident.assignedTeamId ? 'rgba(191, 90, 242, 0.12)' : 'var(--apple-surface-2)',
                 color: incident.assignedTeamId ? 'var(--apple-purple)' : 'var(--apple-text-tertiary)',
+                cursor: canAssign ? 'pointer' : 'default',
               }}>
               <Users className="w-3 h-3 mr-1" style={{ strokeWidth: 1.8 }} />
               {incident.assignedTeamName || 'Assign Team'}
@@ -355,6 +357,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
