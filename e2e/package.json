@@ -1,0 +1,13 @@
+{
+  "name": "@incident-analyzer/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test --config=playwright.config.ts",
+    "test:headed": "npx playwright test --config=playwright.config.ts --headed",
+    "test:ui": "npx playwright test --config=playwright.config.ts --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  }
+}
