@@ -95,4 +95,11 @@ export class NotificationStore {
     }
     this.cache = [];
   }
+
+  async clearForOrg(orgId: string): Promise<void> {
+    if (this.useMongo()) {
+      await NotificationModel.deleteMany({ orgId });
+    }
+    this.cache = this.cache.filter(n => n.orgId !== orgId);
+  }
 }

@@ -4,6 +4,7 @@ import { IncidentStore } from '../stores/incident-store';
 import { RunbookStore } from '../stores/runbook-store';
 import { UserStore } from '../stores/user-store';
 import { TeamStore } from '../stores/team-store';
+import { NotificationStore } from '../stores/notification-store';
 import { Incident, Runbook, Severity, IncidentStatus, RunbookStep } from '@incident-analyzer/shared';
 import { authMiddleware, requirePermission } from '../middleware/auth';
 
@@ -321,7 +322,7 @@ const scenarios: SeedScenario[] = [
   },
 ];
 
-export function seedRoutes(incidentStore: IncidentStore, runbookStore: RunbookStore, userStore: UserStore, teamStore: TeamStore): Router {
+export function seedRoutes(incidentStore: IncidentStore, runbookStore: RunbookStore, userStore: UserStore, teamStore: TeamStore, notificationStore?: NotificationStore): Router {
   const router = Router();
   const auth = authMiddleware(userStore);
 
@@ -330,6 +331,7 @@ export function seedRoutes(incidentStore: IncidentStore, runbookStore: RunbookSt
     // Clear existing data for this org
     await incidentStore.clear(orgId);
     await runbookStore.clear(orgId);
+    if (notificationStore) await notificationStore.clearForOrg(orgId);
 
     // Seed runbooks
     const runbooks = createRunbooks();

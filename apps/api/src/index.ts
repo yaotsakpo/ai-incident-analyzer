@@ -96,7 +96,7 @@ app.use('/analyze', analyzeRoutes(incidentStore, runbookStore, userStore, pagerd
 app.use('/anomaly', anomalyRoutes(userStore));
 app.use('/incidents', incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));
 app.use('/runbooks', runbookRoutes(runbookStore, userStore));
-app.use('/seed', seedRoutes(incidentStore, runbookStore, userStore, teamStore));
+app.use('/seed', seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
 app.use('/webhooks', webhookRoutes(incidentStore));
 app.use('/settings/integrations', settingsRoutes(settingsStore, userStore, slack, jira, opsgenie, aiProvider, pagerduty, auditStore));
 app.use('/settings/preferences', preferencesRoutes(userStore));

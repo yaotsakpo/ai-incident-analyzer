@@ -203,7 +203,8 @@ export default function IncidentDetail() {
 
   const exportPDF = () => {
     if (!incident) return;
-    const a = incident.analysis;
+    const a = incident.analysis || {} as any;
+    if (!a.severity) return;
     const html = `<!DOCTYPE html><html><head><title>Incident Report - ${incident.id}</title>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:800px;margin:0 auto;padding:40px;color:#1c1c1e}
 h1{font-size:22px;margin-bottom:4px}h2{font-size:16px;margin-top:28px;border-bottom:1px solid #e5e5ea;padding-bottom:6px}
@@ -230,14 +231,14 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
 
   const copySummary = () => {
     if (!incident) return;
-    const a = incident.analysis;
+    const a = incident.analysis || {} as any;
     const text = [
       `🚨 ${incident.title}`,
-      `Status: ${incident.status} | Severity: ${a.severity}`,
+      `Status: ${incident.status} | Severity: ${a?.severity || 'unknown'}`,
       `Service: ${incident.service || 'unknown'}`,
-      `Root Cause: ${a.rootCause.category} — ${a.rootCause.description}`,
-      `Confidence: ${Math.round(a.confidence * 100)}% | Logs: ${a.analyzedLogs}`,
-      a.recommendations.length ? `\nRecommendations:\n${a.recommendations.map((r: string, i: number) => `  ${i + 1}. ${r}`).join('\n')}` : '',
+      `Root Cause: ${a?.rootCause?.category || 'Unknown'} — ${a?.rootCause?.description || ''}`,
+      `Confidence: ${Math.round((a?.confidence || 0) * 100)}% | Logs: ${a?.analyzedLogs || 0}`,
+      a?.recommendations?.length ? `\nRecommendations:\n${a.recommendations.map((r: string, i: number) => `  ${i + 1}. ${r}`).join('\n')}` : '',
     ].filter(Boolean).join('\n');
     navigator.clipboard.writeText(text);
     toast('Summary copied to clipboard', 'success');
@@ -263,9 +264,9 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
     );
   }
 
-  const a = incident.analysis;
+  const a = incident.analysis || {} as any;
   const completedSteps = incident.runbook?.completedSteps || [];
-  const sev = severityStyle[a.severity];
+  const sev = severityStyle[a?.severity] || severityStyle['medium'];
   const stat = statusStyle[incident.status];
 
   return (
@@ -283,7 +284,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
             {stat.label}
           </span>
           <span className="apple-pill" style={{ background: sev.bg, color: sev.color }}>
-            {a.severity}
+            {a?.severity || 'unknown'}
           </span>
           {incident.service && (
             <span className="apple-pill" style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>
@@ -397,7 +398,7 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
             const events: { time: string; label: string; icon: React.ReactNode; color: string }[] = [];
             events.push({ time: incident.createdAt, label: 'Incident created', icon: <AlertTriangle className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-red)' });
             if (incident.analysis) {
-              events.push({ time: incident.createdAt, label: `AI analysis completed — ${a.severity} severity, ${Math.round(a.confidence * 100)}% confidence`, icon: <SearchIcon className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-blue)' });
+              events.push({ time: incident.createdAt, label: `AI analysis completed — ${a?.severity || 'unknown'} severity, ${Math.round((a?.confidence || 0) * 100)}% confidence`, icon: <SearchIcon className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-blue)' });
             }
             if (incident.runbook) {
               events.push({ time: incident.createdAt, label: `Runbook matched — ${runbook?.name || 'Loading...'}`, icon: <BookOpen className="w-3 h-3" style={{ strokeWidth: 2 }} />, color: 'var(--apple-purple)' });
@@ -456,10 +457,10 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'Confidence', value: `${Math.round(a.confidence * 100)}%`, color: 'var(--apple-blue)' },
-          { label: 'Logs Analyzed', value: a.analyzedLogs, color: 'var(--apple-text-primary)' },
-          { label: 'Patterns', value: a.patterns.length, color: 'var(--apple-orange)' },
-          { label: 'Processing', value: `${a.processingTimeMs}ms`, color: 'var(--apple-green)' },
+          { label: 'Confidence', value: `${Math.round((a?.confidence || 0) * 100)}%`, color: 'var(--apple-blue)' },
+          { label: 'Logs Analyzed', value: a?.analyzedLogs || 0, color: 'var(--apple-text-primary)' },
+          { label: 'Patterns', value: a?.patterns?.length || 0, color: 'var(--apple-orange)' },
+          { label: 'Processing', value: `${a?.processingTimeMs || 0}ms`, color: 'var(--apple-green)' },
         ].map(({ label, value, color }) => (
           <div key={label} className="apple-card text-center">
             <div className="apple-stat-label">{label}</div>
@@ -473,12 +474,12 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
         <Expandable title="Root Cause" icon={<AlertTriangle className="w-[18px] h-[18px]" style={{ color: 'var(--apple-orange)', strokeWidth: 1.8 }} />}>
           <div className="space-y-4">
             <div className="px-3.5 py-2.5 rounded-[10px] text-[14px] font-semibold" style={{ background: 'rgba(255, 159, 10, 0.1)', color: 'var(--apple-orange)' }}>
-              {a.rootCause.category}
+              {a?.rootCause?.category || 'Unknown'}
             </div>
-            <p className="text-[14px] leading-relaxed" style={{ color: 'var(--apple-text-secondary)' }}>{a.rootCause.description}</p>
+            <p className="text-[14px] leading-relaxed" style={{ color: 'var(--apple-text-secondary)' }}>{a?.rootCause?.description || ''}</p>
             <div className="space-y-1.5">
               <div className="apple-stat-label" style={{ marginBottom: 4 }}>Evidence</div>
-              {a.rootCause.evidence.map((e: string, i: number) => (
+              {(a?.rootCause?.evidence || []).map((e: string, i: number) => (
                 <div key={i} className="text-[12px] font-mono px-3 py-2 rounded-[8px]" style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>{e}</div>
               ))}
             </div>
@@ -486,9 +487,9 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
         </Expandable>
 
         {/* Recommendations */}
-        <Expandable title="Recommendations" icon={<CheckCircle className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />} count={a.recommendations.length}>
+        <Expandable title="Recommendations" icon={<CheckCircle className="w-[18px] h-[18px]" style={{ color: 'var(--apple-green)', strokeWidth: 1.8 }} />} count={a?.recommendations?.length || 0}>
           <ul className="space-y-3">
-            {a.recommendations.map((rec: string, i: number) => (
+            {(a?.recommendations || []).map((rec: string, i: number) => (
               <li key={i} className="flex items-start gap-3 text-[14px] leading-relaxed" style={{ color: 'var(--apple-text-secondary)' }}>
                 <span className="mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0"
                   style={{ background: 'var(--apple-surface-3)', color: 'var(--apple-text-secondary)' }}>{i + 1}</span>
@@ -500,10 +501,10 @@ ${incident.auditLog?.length ? `<h2>Audit Trail</h2><table><tr><th>User</th><th>A
       </div>
 
       {/* Patterns */}
-      {a.patterns.length > 0 && (
+      {(a?.patterns?.length || 0) > 0 && (
         <Expandable title="Detected Patterns" icon={<AlertTriangle className="w-[18px] h-[18px]" style={{ color: 'var(--apple-orange)', strokeWidth: 1.8 }} />} count={a.patterns.length} defaultOpen={false}>
           <div className="grid gap-3 md:grid-cols-2">
-            {a.patterns.map((p: any, i: number) => (
+            {(a?.patterns || []).map((p: any, i: number) => (
               <div key={i} className="p-3.5 rounded-[10px]" style={{ background: 'var(--apple-surface-2)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[14px] font-medium" style={{ color: 'var(--apple-text-primary)' }}>{p.name}</span>

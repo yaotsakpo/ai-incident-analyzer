@@ -37,10 +37,10 @@ function exportCSV(incidents: any[]) {
     inc.id,
     `"${inc.title.replace(/"/g, '""')}"`,
     inc.service || '',
-    inc.analysis.severity,
+    inc.analysis?.severity || '',
     inc.status,
-    inc.analysis.rootCause.category,
-    Math.round(inc.analysis.confidence * 100) + '%',
+    inc.analysis?.rootCause?.category || '',
+    inc.analysis ? Math.round(inc.analysis.confidence * 100) + '%' : '',
     inc.createdAt,
     inc.resolvedAt || '',
     inc.timeToResolveMs ? Math.round(inc.timeToResolveMs / 60000) : '',
@@ -104,7 +104,7 @@ export default function IncidentsFeed() {
       setLastRefresh(new Date());
 
       // Browser notification for new critical incidents
-      const currentCritIds = new Set<string>(incs.filter((i: any) => i.analysis.severity === 'critical' && i.status !== 'resolved').map((i: any) => i.id as string));
+      const currentCritIds = new Set<string>(incs.filter((i: any) => i.analysis?.severity === 'critical' && i.status !== 'resolved').map((i: any) => i.id as string));
       setPrevCriticalIds(prev => {
         if (prev.size > 0) {
           const newCrits = Array.from(currentCritIds).filter(id => !prev.has(id));
@@ -196,7 +196,7 @@ export default function IncidentsFeed() {
     const rangeMs: Record<string, number> = { '1h': 3600000, '6h': 21600000, '24h': 86400000, '7d': 604800000, '30d': 2592000000 };
     return incidents.filter((inc: any) => {
       if (filter !== 'all' && inc.status !== filter) return false;
-      if (severityFilter !== 'all' && inc.analysis.severity !== severityFilter) return false;
+      if (severityFilter !== 'all' && inc.analysis?.severity !== severityFilter) return false;
       if (serviceFilter !== 'all' && inc.service !== serviceFilter) return false;
       if (dateRange !== 'all' && rangeMs[dateRange]) {
         if (now - new Date(inc.createdAt).getTime() > rangeMs[dateRange]) return false;
@@ -466,7 +466,7 @@ export default function IncidentsFeed() {
       {/* Incident list */}
       <div className="space-y-2" ref={listRef}>
         {paginatedList.map((inc: any, idx: number) => {
-          const sev = severityStyle[inc.analysis.severity];
+          const sev = severityStyle[inc.analysis?.severity] || severityStyle['medium'];
           const stat = statusStyle[inc.status];
           const isFocused = idx === focusIdx;
           const isSelected = selected.has(inc.id);
@@ -490,13 +490,13 @@ export default function IncidentsFeed() {
                   <div className="flex items-center gap-2.5 mb-1">
                     <h3 className="text-[15px] font-medium truncate" style={{ color: 'var(--apple-text-primary)' }}>{inc.title}</h3>
                     <span className="apple-pill shrink-0" style={{ background: sev.bg, color: sev.color }}>
-                      {inc.analysis.severity}
+                      {inc.analysis?.severity || 'unknown'}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--apple-text-tertiary)' }}>
                     <span className="flex items-center gap-1" style={{ color: 'var(--apple-text-secondary)' }}>
-                      {categoryIcon[inc.analysis.rootCause.category] || <Bug className="w-3 h-3" />}
-                      {inc.analysis.rootCause.category}
+                      {categoryIcon[inc.analysis?.rootCause?.category] || <Bug className="w-3 h-3" />}
+                      {inc.analysis?.rootCause?.category || 'Unknown'}
                     </span>
                     {inc.service && (
                       <span className="px-2 py-0.5 rounded-full" style={{ background: 'var(--apple-surface-2)', color: 'var(--apple-text-secondary)' }}>
@@ -518,9 +518,9 @@ export default function IncidentsFeed() {
                 </div>
                 <div className="text-right shrink-0 mr-1">
                   <div className="text-[13px] font-medium tabular-nums" style={{ color: 'var(--apple-text-secondary)' }}>
-                    {Math.round(inc.analysis.confidence * 100)}%
+                    {Math.round((inc.analysis?.confidence || 0) * 100)}%
                   </div>
-                  <div className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>{inc.analysis.analyzedLogs} logs</div>
+                  <div className="text-[11px]" style={{ color: 'var(--apple-text-tertiary)' }}>{inc.analysis?.analyzedLogs || 0} logs</div>
                 </div>
                 {inc.status !== 'resolved' && (canAck || canResolve) && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
