@@ -32,9 +32,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const app: express.Express = express();
 
 // Trust proxy headers when behind Render's reverse proxy
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', true);
-}
+app.set('trust proxy', 1);
 
 // Configure CORS - allow all origins in development, specific in production
 const corsOptions = {
