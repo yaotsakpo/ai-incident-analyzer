@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "cd ../.. && pnpm install && pnpm build:dashboard",
+  "buildCommand": "cd ../.. && pnpm install && pnpm --filter @incident-analyzer/shared build && pnpm build:dashboard",
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
