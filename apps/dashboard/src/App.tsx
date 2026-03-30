@@ -156,7 +156,7 @@ function AppShell() {
           </div>
         )}
       </div>
-      <nav className={`flex-1 space-y-0.5 ${(!mobile && collapsed) ? 'px-2' : 'px-3'}`} aria-label="Main navigation">
+      <nav className={`flex-1 flex flex-col justify-evenly ${(!mobile && collapsed) ? 'px-2' : 'px-3'}`} aria-label="Main navigation">
         {navItems.filter(item => {
           if (!item.roles.includes(user!.role)) return false;
           if (user!.role === 'custom' && item.perm) return user!.permissions?.includes(item.perm) ?? false;
@@ -172,7 +172,7 @@ function AppShell() {
               aria-label={label}
               onClick={() => mobile && setMobileOpen(false)}
               className={({ isActive }: { isActive: boolean }) =>
-                `flex items-center ${(!mobile && collapsed) ? 'justify-center' : 'gap-2.5'} px-3 py-[7px] rounded-[8px] text-[13px] font-medium transition-all duration-200`
+                `flex items-center ${(!mobile && collapsed) ? 'justify-center' : 'gap-3'} px-4 py-4 rounded-[10px] text-[15px] font-medium transition-all duration-200`
               }
               style={({ isActive }: { isActive: boolean }) => ({
                 background: isActive ? 'var(--apple-surface-3)' : 'transparent',
@@ -304,7 +304,7 @@ function AppShell() {
             {sidebarContent(true)}
           </div>
         </div>
-        <aside className={`desktop-sidebar apple-glass flex flex-col border-r shrink-0 transition-all duration-300 ease-in-out ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}
+        <aside className={`desktop-sidebar apple-glass flex flex-col h-full border-r shrink-0 transition-all duration-300 ease-in-out ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}
           style={{ borderColor: 'var(--apple-border)' }} role="navigation" aria-label="Main navigation">
           {sidebarContent(false)}
         </aside>

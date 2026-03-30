@@ -48,6 +48,9 @@ export default function AuditTrail() {
 
   useEffect(() => { fetchEntries(category); }, [category, fetchEntries]);
 
+  // Reset to first page when search changes
+  useEffect(() => { setPage(1); }, [search]);
+
   const filtered = search.trim()
     ? entries.filter(e =>
         (e.details || '').toLowerCase().includes(search.toLowerCase()) ||
