@@ -3,7 +3,7 @@ services:
     name: incident-analyzer-api
     runtime: node
     plan: free
-    buildCommand: cd apps/api && pnpm install && pnpm build
+    buildCommand: pnpm install && pnpm --filter @incident-analyzer/shared build && pnpm --filter @incident-analyzer/api build
     startCommand: cd apps/api && pnpm start
     envVars:
       - key: NODE_ENV
