@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 interface User {
   id: string;
   orgId: string;
@@ -54,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshOrgs = useCallback(() => {
     if (!token) return;
-    fetch('/api/auth/orgs', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/auth/orgs`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => { if (data.orgs) setOrgs(data.orgs); })
       .catch(() => {});
@@ -69,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(u => { setUser(u); setMustChangePassword(!!u.mustChangePassword); setNeedsOnboarding(u.role === 'admin' && u.onboardingComplete === false); setLoading(false); refreshOrgs(); })
       .catch(() => { setToken(null); localStorage.removeItem('auth-token'); localStorage.removeItem('refresh-token'); setLoading(false); });
@@ -77,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -97,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     if (token) {
       const refreshToken = localStorage.getItem('refresh-token');
-      fetch('/api/auth/logout', {
+      fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -144,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchOrg = useCallback(async (orgId: string) => {
     if (!token) return false;
     try {
-      const res = await fetch('/api/auth/switch-org', {
+      const res = await fetch(`${API_BASE}/auth/switch-org`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ orgId }),
