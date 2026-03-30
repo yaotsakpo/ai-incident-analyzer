@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "buildCommand": "cd ../.. && pnpm install && pnpm build:dashboard",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "VITE_API_URL": "@api_url"
+  }
+}

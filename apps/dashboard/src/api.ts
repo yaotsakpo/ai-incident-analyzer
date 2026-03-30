@@ -33,7 +33,7 @@ import type {
   AlertGroup,
 } from './types';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('auth-token');

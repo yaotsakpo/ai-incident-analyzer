@@ -30,7 +30,15 @@ import { authLimiter, webhookLimiter, apiLimiter } from './middleware/rate-limit
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 const app: express.Express = express();
-app.use(cors());
+
+// Configure CORS - allow all origins in development, specific in production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? (process.env.FRONTEND_URL || true) // Allow specific origin or all if not set
+    : true, // Allow all origins in development
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 
 // Initialize stores and services

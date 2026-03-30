@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @incident-analyzer/api dev",
     "dev:dashboard": "pnpm --filter @incident-analyzer/dashboard dev",
     "build": "pnpm -r build",
+    "build:dashboard": "pnpm --filter @incident-analyzer/dashboard build",
+    "build:api": "pnpm --filter @incident-analyzer/api build",
     "clean": "rm -rf apps/*/dist packages/*/dist",
     "test:e2e": "npx playwright test"
   },
