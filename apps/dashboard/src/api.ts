@@ -34,6 +34,7 @@ import type {
 } from './types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
+console.log('API BASE URL:', BASE, 'VITE_API_URL:', import.meta.env.VITE_API_URL);
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('auth-token');
