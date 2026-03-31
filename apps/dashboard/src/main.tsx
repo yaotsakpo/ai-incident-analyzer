@@ -5,15 +5,15 @@ import { inject } from '@vercel/analytics';
 import App from './App';
 import './index.css';
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __vercelAnalyticsInjected: boolean | undefined;
-}
+const shouldInjectAnalytics =
+  import.meta.env.PROD ||
+  import.meta.env.VITE_ENABLE_VERCEL_ANALYTICS === 'true';
+
 const globalWithAnalyticsFlag = globalThis as typeof globalThis & {
   __vercelAnalyticsInjected?: boolean;
 };
 
-if (!globalWithAnalyticsFlag.__vercelAnalyticsInjected) {
+if (shouldInjectAnalytics && !globalWithAnalyticsFlag.__vercelAnalyticsInjected) {
   inject();
   globalWithAnalyticsFlag.__vercelAnalyticsInjected = true;
 }
