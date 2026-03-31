@@ -9,14 +9,13 @@ declare global {
   // eslint-disable-next-line no-var
   var __vercelAnalyticsInjected: boolean | undefined;
 }
+const globalWithAnalyticsFlag = globalThis as typeof globalThis & {
+  __vercelAnalyticsInjected?: boolean;
+};
 
-const shouldInjectAnalytics =
-  import.meta.env.PROD ||
-  import.meta.env.VITE_ENABLE_VERCEL_ANALYTICS === 'true';
-
-if (shouldInjectAnalytics && !globalThis.__vercelAnalyticsInjected) {
+if (!globalWithAnalyticsFlag.__vercelAnalyticsInjected) {
   inject();
-  globalThis.__vercelAnalyticsInjected = true;
+  globalWithAnalyticsFlag.__vercelAnalyticsInjected = true;
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
