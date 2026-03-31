@@ -10,7 +10,11 @@ declare global {
   var __vercelAnalyticsInjected: boolean | undefined;
 }
 
-if (!globalThis.__vercelAnalyticsInjected) {
+const shouldInjectAnalytics =
+  import.meta.env.PROD ||
+  import.meta.env.VITE_ENABLE_VERCEL_ANALYTICS === 'true';
+
+if (shouldInjectAnalytics && !globalThis.__vercelAnalyticsInjected) {
   inject();
   globalThis.__vercelAnalyticsInjected = true;
 }
