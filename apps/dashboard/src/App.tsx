@@ -399,12 +399,12 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<ErrorBoundary><IncidentsFeed /></ErrorBoundary>} />
             <Route path="/incidents/:id" element={<ErrorBoundary><IncidentDetail /></ErrorBoundary>} />
-            <Route path="/anomalies" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} userRole={user.role}><AnomalyDashboard /></RoleGuard></ErrorBoundary>} />
+            <Route path="/anomalies" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} perm="incidents:view" user={user}><AnomalyDashboard /></RoleGuard></ErrorBoundary>} />
             <Route path="/dashboard" element={<ErrorBoundary><CustomDashboard /></ErrorBoundary>} />
             <Route path="/analytics" element={<ErrorBoundary><Analytics /></ErrorBoundary>} />
-            <Route path="/runbooks" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} userRole={user.role}><RunbooksList /></RoleGuard></ErrorBoundary>} />
-            <Route path="/runbooks/:id" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} userRole={user.role}><RunbookDetail /></RoleGuard></ErrorBoundary>} />
-            <Route path="/audit-trail" element={<ErrorBoundary><RoleGuard roles={['admin']} userRole={user.role}><AuditTrail /></RoleGuard></ErrorBoundary>} />
+            <Route path="/runbooks" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} perm="runbooks:view" user={user}><RunbooksList /></RoleGuard></ErrorBoundary>} />
+            <Route path="/runbooks/:id" element={<ErrorBoundary><RoleGuard roles={['admin', 'responder']} perm="runbooks:view" user={user}><RunbookDetail /></RoleGuard></ErrorBoundary>} />
+            <Route path="/audit-trail" element={<ErrorBoundary><RoleGuard roles={['admin']} perm="audit:view" user={user}><AuditTrail /></RoleGuard></ErrorBoundary>} />
             <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
           </Routes>
         </main>
@@ -414,8 +414,11 @@ function AppShell() {
   );
 }
 
-function RoleGuard({ roles, userRole, children }: { roles: string[]; userRole: string; children: ReactNode }) {
-  if (!roles.includes(userRole)) return <Navigate to="/" replace />;
-  return <>{children}</>;
+function RoleGuard({ roles, perm, user, children }: { roles: string[]; perm?: string; user: { role: string; permissions?: string[] }; children: ReactNode }) {
+  // Allow if the user's built-in role is in the allowed list
+  if (roles.includes(user.role)) return <>{children}</>;
+  // Allow custom role users if they have the required permission
+  if (user.role === 'custom' && perm && user.permissions?.includes(perm)) return <>{children}</>;
+  return <Navigate to="/" replace />;
 }
 

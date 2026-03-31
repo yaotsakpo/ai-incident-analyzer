@@ -103,7 +103,9 @@ app.get('/health', async (_req, res) => {
 });
 
 // Mount routes
-app.use('/auth', authLimiter, authRoutes(userStore, teamStore, auditStore));
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter);
+app.use('/auth', apiLimiter, authRoutes(userStore, teamStore, auditStore));
 app.use('/analyze', apiLimiter, analyzeRoutes(incidentStore, runbookStore, userStore, pagerduty));
 app.use('/anomaly', apiLimiter, anomalyRoutes(userStore));
 app.use('/incidents', apiLimiter, incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));

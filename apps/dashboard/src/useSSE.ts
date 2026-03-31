@@ -16,7 +16,9 @@ const listeners = new Set<SSEHandler>();
 function ensureConnection() {
   if (sharedES && sharedES.readyState !== EventSource.CLOSED) return;
 
-  sharedES = new EventSource(api.streamUrl);
+  const token = localStorage.getItem('auth-token');
+  const url = token ? `${api.streamUrl}?token=${encodeURIComponent(token)}` : api.streamUrl;
+  sharedES = new EventSource(url);
 
   sharedES.onmessage = (msg) => {
     try {

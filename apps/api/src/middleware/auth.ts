@@ -14,10 +14,12 @@ declare global {
 export function authMiddleware(userStore: UserStore) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const header = req.headers.authorization;
-    if (!header || !header.startsWith('Bearer ')) {
+    // Support token via query param for SSE (EventSource can't send headers)
+    const queryToken = req.query.token as string | undefined;
+    if ((!header || !header.startsWith('Bearer ')) && !queryToken) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    const token = header.slice(7);
+    const token = queryToken || header!.slice(7);
     // Try sync first (fast path), fall back to async DB lookup
     let user = userStore.validateToken(token);
     if (!user) {
