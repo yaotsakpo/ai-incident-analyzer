@@ -64,10 +64,11 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 15000);
     return () => clearInterval(interval);
-  }, [fetchNotifications]);
+  }, [fetchNotifications, user]);
 
   // Close notif dropdown on outside click
   useEffect(() => {
@@ -79,13 +80,15 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     api.listTeams().then((d: { teams?: Team[] }) => {
       const teams = d.teams || [];
       if (teams.length > 0) setTeamName(teams[0].name);
     }).catch(() => {});
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     const fetchCounts = () => {
       api.listIncidents().then((data: { incidents?: Incident[] }) => {
         const incs = data.incidents || [];
@@ -98,7 +101,7 @@ function AppShell() {
     fetchCounts();
     const interval = setInterval(fetchCounts, settings.autoRefreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [settings.autoRefreshInterval]);
+  }, [settings.autoRefreshInterval, user]);
 
   // Apply theme
   useEffect(() => {
