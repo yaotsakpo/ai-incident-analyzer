@@ -26,6 +26,18 @@ import { AIProviderService } from './services/ai-provider';
 import { logger } from './services/logger';
 import { connectDB, isConnected } from './db/connection';
 import { authLimiter, webhookLimiter, apiLimiter } from './middleware/rate-limit';
+import { errorHandler } from './middleware/error-handler';
+
+// --- Env validation (fail-fast before any initialization) ---
+const DEFAULT_JWT_SECRET = 'incident-analyzer-jwt-secret-change-in-production';
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: JWT_SECRET env var is not set or uses the insecure default. Refusing to start in production.');
+    process.exit(1);
+  } else {
+    console.warn('WARNING: JWT_SECRET is not set. Using insecure default — fine for development only.');
+  }
+}
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -118,6 +130,9 @@ app.use('/teams', teamRoutes(teamStore, userStore, auditStore));
 app.use('/notifications', notificationRoutes(notificationStore, userStore));
 app.use('/audit-log', auditRoutes(auditStore, userStore));
 app.use('/org', orgRoutes(userStore));
+
+// Global error handler — must be last middleware
+app.use(errorHandler);
 
 async function start() {
   // Connect to MongoDB (falls back to in-memory if unavailable)
