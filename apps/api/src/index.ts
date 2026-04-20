@@ -27,6 +27,7 @@ import { logger } from './services/logger';
 import { connectDB, isConnected } from './db/connection';
 import { authLimiter, webhookLimiter, apiLimiter } from './middleware/rate-limit';
 import { errorHandler } from './middleware/error-handler';
+import { requestId } from './middleware/request-id';
 
 // --- Env validation (fail-fast before any initialization) ---
 const DEFAULT_JWT_SECRET = 'incident-analyzer-jwt-secret-change-in-production';
@@ -61,6 +62,9 @@ app.use(express.json({
   limit: '1mb',
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
+
+// Request correlation ID — must be early in the chain
+app.use(requestId);
 
 // Initialize stores and services
 const incidentStore = new IncidentStore();
