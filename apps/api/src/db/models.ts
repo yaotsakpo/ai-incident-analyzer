@@ -257,7 +257,7 @@ const RefreshTokenSchema = new Schema({
   token: { type: String, required: true, unique: true, index: true },
   userId: { type: String, required: true, index: true },
   orgId: { type: String, required: true },
-  expiresAt: { type: Date, required: true, index: { expires: 0 } }, // MongoDB TTL index
+  expiresAt: { type: Date, required: true, expires: 0 }, // MongoDB TTL index — auto-deletes when timestamp passes
 }, { timestamps: false, versionKey: false });
 
 export const RefreshTokenModel = mongoose.model('RefreshToken', RefreshTokenSchema);
