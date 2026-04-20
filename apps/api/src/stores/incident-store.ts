@@ -34,17 +34,21 @@ export class IncidentStore {
     return this.cache.get(id);
   }
 
-  async list(limit = 50, orgId?: string): Promise<Incident[]> {
+  async list(limit = 50, orgId?: string, offset = 0): Promise<Incident[]> {
     if (this.useMongo()) {
       const filter: any = orgId ? { orgId } : { orgId: '__none__' };
-      const docs = await IncidentModel.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+      const docs = await IncidentModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(offset)
+        .limit(limit)
+        .lean();
       return docs.map((d: any) => { delete d._id; delete d.__v; return d as Incident; });
     }
     let items = Array.from(this.cache.values());
     items = items.filter((i: any) => i.orgId === orgId);
     return items
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, limit);
+      .slice(offset, offset + limit);
   }
 
   async addAudit(incidentId: string, entry: Omit<AuditEntry, 'id' | 'incidentId' | 'timestamp'>): Promise<void> {

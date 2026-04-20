@@ -149,4 +149,26 @@ describe('IncidentStore (in-memory)', () => {
     expect(list[0].createdAt).toBe('2024-06-01T00:00:00Z');
     expect(list[1].createdAt).toBe('2024-01-01T00:00:00Z');
   });
+
+  it('paginates results with limit and offset', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.save(makeIncident({ orgId: 'org-page' }));
+    }
+    const page1 = await store.list(2, 'org-page', 0);
+    expect(page1).toHaveLength(2);
+
+    const page2 = await store.list(2, 'org-page', 2);
+    expect(page2).toHaveLength(2);
+
+    // No overlap between pages
+    const ids1 = page1.map(i => i.id);
+    const ids2 = page2.map(i => i.id);
+    expect(ids1.filter(id => ids2.includes(id))).toHaveLength(0);
+  });
+
+  it('returns empty array when offset exceeds total', async () => {
+    await store.save(makeIncident({ orgId: 'org-page2' }));
+    const result = await store.list(10, 'org-page2', 999);
+    expect(result).toHaveLength(0);
+  });
 });
