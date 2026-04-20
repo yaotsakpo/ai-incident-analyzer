@@ -46,14 +46,17 @@ const app: express.Express = express();
 // Trust proxy headers when behind Render's reverse proxy
 app.set('trust proxy', 1);
 
-// Configure CORS - allow all origins in development, specific in production
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? (process.env.FRONTEND_URL || true) // Allow specific origin or all if not set
-    : true, // Allow all origins in development
-  credentials: true,
-};
-app.use(cors(corsOptions));
+// Configure CORS - require explicit origin in production
+const allowedOrigin = process.env.NODE_ENV === 'production'
+  ? process.env.FRONTEND_URL
+  : true;
+
+if (process.env.NODE_ENV === 'production' && !allowedOrigin) {
+  console.error('FATAL: FRONTEND_URL env var must be set in production for CORS.');
+  process.exit(1);
+}
+
+app.use(cors({ origin: allowedOrigin, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 
 // Initialize stores and services
@@ -122,7 +125,9 @@ app.use('/analyze', apiLimiter, analyzeRoutes(incidentStore, runbookStore, userS
 app.use('/anomaly', apiLimiter, anomalyRoutes(userStore));
 app.use('/incidents', apiLimiter, incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));
 app.use('/runbooks', apiLimiter, runbookRoutes(runbookStore, userStore));
-app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
+}
 app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore));
 app.use('/settings/integrations', settingsRoutes(settingsStore, userStore, slack, jira, opsgenie, aiProvider, pagerduty, auditStore));
 app.use('/settings/preferences', preferencesRoutes(userStore));
