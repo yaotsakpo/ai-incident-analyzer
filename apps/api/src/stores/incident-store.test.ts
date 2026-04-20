@@ -149,4 +149,87 @@ describe('IncidentStore (in-memory)', () => {
     expect(list[0].createdAt).toBe('2024-06-01T00:00:00Z');
     expect(list[1].createdAt).toBe('2024-01-01T00:00:00Z');
   });
+
+  it('paginates results with limit and offset', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.save(makeIncident({ orgId: 'org-page' }));
+    }
+    const page1 = await store.list(2, 'org-page', 0);
+    expect(page1).toHaveLength(2);
+
+    const page2 = await store.list(2, 'org-page', 2);
+    expect(page2).toHaveLength(2);
+
+    // No overlap between pages
+    const ids1 = page1.map(i => i.id);
+    const ids2 = page2.map(i => i.id);
+    expect(ids1.filter(id => ids2.includes(id))).toHaveLength(0);
+  });
+
+  it('returns empty array when offset exceeds total', async () => {
+    await store.save(makeIncident({ orgId: 'org-page2' }));
+    const result = await store.list(10, 'org-page2', 999);
+    expect(result).toHaveLength(0);
+  });
+
+  describe('multi-tenant isolation', () => {
+    it('list() only returns incidents from the requested org', async () => {
+      await store.save(makeIncident({ id: 'inc-iso-a1', orgId: 'org-A' }));
+      await store.save(makeIncident({ id: 'inc-iso-a2', orgId: 'org-A' }));
+      await store.save(makeIncident({ id: 'inc-iso-b1', orgId: 'org-B' }));
+
+      const orgA = await store.list(50, 'org-A');
+      const orgB = await store.list(50, 'org-B');
+
+      expect(orgA.every((i: any) => i.orgId === 'org-A')).toBe(true);
+      expect(orgA.some((i: any) => i.id === 'inc-iso-b1')).toBe(false);
+
+      expect(orgB.every((i: any) => i.orgId === 'org-B')).toBe(true);
+      expect(orgB.some((i: any) => i.id === 'inc-iso-a1')).toBe(false);
+    });
+
+    it('list() returns empty array for unknown org', async () => {
+      await store.save(makeIncident({ orgId: 'org-A' }));
+      const result = await store.list(50, 'org-unknown');
+      expect(result).toHaveLength(0);
+    });
+
+    it('updateStatus() does not affect incidents in other orgs', async () => {
+      await store.save(makeIncident({ id: 'inc-upd-a', orgId: 'org-A', status: 'open' }));
+      await store.save(makeIncident({ id: 'inc-upd-b', orgId: 'org-B', status: 'open' }));
+
+      await store.updateStatus('inc-upd-a', 'resolved');
+
+      const orgB = await store.list(50, 'org-B');
+      expect(orgB.find(i => i.id === 'inc-upd-b')?.status).toBe('open');
+    });
+
+    it('clear() only removes incidents for the specified org', async () => {
+      await store.save(makeIncident({ id: 'inc-clr-a', orgId: 'org-A' }));
+      await store.save(makeIncident({ id: 'inc-clr-b', orgId: 'org-B' }));
+
+      await store.clear('org-A');
+
+      const orgA = await store.list(50, 'org-A');
+      const orgB = await store.list(50, 'org-B');
+
+      expect(orgA).toHaveLength(0);
+      expect(orgB.some((i: any) => i.id === 'inc-clr-b')).toBe(true);
+    });
+
+    it('pagination respects org isolation', async () => {
+      for (let i = 0; i < 4; i++) {
+        await store.save(makeIncident({ orgId: 'org-pag-A' }));
+      }
+      for (let i = 0; i < 3; i++) {
+        await store.save(makeIncident({ orgId: 'org-pag-B' }));
+      }
+
+      const pageA = await store.list(2, 'org-pag-A', 0);
+      const pageB = await store.list(2, 'org-pag-B', 0);
+
+      expect(pageA.every((i: any) => i.orgId === 'org-pag-A')).toBe(true);
+      expect(pageB.every((i: any) => i.orgId === 'org-pag-B')).toBe(true);
+    });
+  });
 });

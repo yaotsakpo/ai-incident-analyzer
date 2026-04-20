@@ -2,7 +2,7 @@ import { User, UserRole } from '@incident-analyzer/shared';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { UserModel, OrganizationModel, OrgMembershipModel } from '../db/models';
+import { UserModel, OrganizationModel, OrgMembershipModel, RefreshTokenModel } from '../db/models';
 import { isConnected } from '../db/connection';
 
 const SALT_ROUNDS = 10;
@@ -85,8 +85,15 @@ export class UserStore {
   private issueTokenPair(userId: string, orgId: string): { token: string; refreshToken: string } {
     const token = jwt.sign({ userId, orgId }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
     const refreshToken = uuidv4();
-    this.refreshTokens.set(refreshToken, { userId, orgId, expiresAt: Date.now() + REFRESH_TOKEN_EXPIRY_MS });
-    // Prune expired refresh tokens periodically
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_MS);
+
+    this.refreshTokens.set(refreshToken, { userId, orgId, expiresAt: expiresAt.getTime() });
+
+    if (this.useMongo()) {
+      RefreshTokenModel.create({ token: refreshToken, userId, orgId, expiresAt }).catch(() => {});
+    }
+
+    // Prune in-memory map periodically
     if (this.refreshTokens.size > 5000) {
       const now = Date.now();
       for (const [k, v] of this.refreshTokens) { if (v.expiresAt < now) this.refreshTokens.delete(k); }
@@ -122,13 +129,32 @@ export class UserStore {
 
   /** Validate a refresh token and issue a new token pair (rotation) */
   async refreshAccessToken(refreshToken: string): Promise<{ user: User; token: string; refreshToken: string } | null> {
-    const entry = this.refreshTokens.get(refreshToken);
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) return null;
+    const normalizedToken = refreshToken.trim();
+
+    // Check in-memory first (fast path)
+    let entry = this.refreshTokens.get(normalizedToken);
+
+    if (!entry && this.useMongo()) {
+      // Fall back to MongoDB (handles restarts where in-memory map was cleared)
+      const doc = await RefreshTokenModel.findOne({ token: { $eq: normalizedToken } }).lean();
+      if (doc) {
+        const d = doc as any;
+        entry = { userId: d.userId, orgId: d.orgId, expiresAt: new Date(d.expiresAt).getTime() };
+      }
+    }
+
     if (!entry || entry.expiresAt < Date.now()) {
-      if (entry) this.refreshTokens.delete(refreshToken);
+      if (entry) this.refreshTokens.delete(normalizedToken);
       return null;
     }
+
     // Rotate: delete old, issue new pair
-    this.refreshTokens.delete(refreshToken);
+    this.refreshTokens.delete(normalizedToken);
+    if (this.useMongo()) {
+      await RefreshTokenModel.deleteOne({ token: { $eq: normalizedToken } });
+    }
+
     const user = await this.getUser(entry.userId);
     if (!user) return null;
     const pair = this.issueTokenPair(entry.userId, entry.orgId);
@@ -193,7 +219,12 @@ export class UserStore {
   logout(token: string, refreshToken?: string): void {
     this.tokens.delete(token);
     this.revokedTokens.add(token);
-    if (refreshToken) this.refreshTokens.delete(refreshToken);
+    if (typeof refreshToken === 'string' && refreshToken.length > 0) {
+      this.refreshTokens.delete(refreshToken);
+      if (this.useMongo()) {
+        RefreshTokenModel.deleteOne({ token: { $eq: refreshToken } }).catch(() => {});
+      }
+    }
     // Prune old entries periodically (simple size cap)
     if (this.revokedTokens.size > 10000) {
       const entries = Array.from(this.revokedTokens);

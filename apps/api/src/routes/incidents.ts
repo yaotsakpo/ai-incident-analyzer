@@ -39,7 +39,9 @@ export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStor
   });
 
   router.get('/', auth, requirePermission('incidents:view'), async (req: Request, res: Response) => {
-    let incidents = await incidentStore.list(100, req.user!.orgId);
+    const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10) || 50, 200);
+    const offset = Math.max(parseInt(String(req.query.offset ?? '0'), 10) || 0, 0);
+    let incidents = await incidentStore.list(limit, req.user!.orgId, offset);
 
     // Team-scoped filtering: ?team=mine returns only incidents assigned to user's teams
     if (req.query.team === 'mine') {
@@ -51,7 +53,7 @@ export function incidentRoutes(incidentStore: IncidentStore, userStore: UserStor
       incidents = incidents.filter(inc => inc.assignedTeamId === req.query.team);
     }
 
-    return res.json({ count: incidents.length, incidents });
+    return res.json({ count: incidents.length, limit, offset, incidents });
   });
 
   router.get('/stats', auth, requirePermission('incidents:view'), async (req: Request, res: Response) => {

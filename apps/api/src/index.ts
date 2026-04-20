@@ -26,6 +26,19 @@ import { AIProviderService } from './services/ai-provider';
 import { logger } from './services/logger';
 import { connectDB, isConnected } from './db/connection';
 import { authLimiter, webhookLimiter, apiLimiter } from './middleware/rate-limit';
+import { errorHandler } from './middleware/error-handler';
+import { requestId } from './middleware/request-id';
+
+// --- Env validation (fail-fast before any initialization) ---
+const DEFAULT_JWT_SECRET = 'incident-analyzer-jwt-secret-change-in-production';
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: JWT_SECRET env var is not set or uses the insecure default. Refusing to start in production.');
+    process.exit(1);
+  } else {
+    console.warn('WARNING: JWT_SECRET is not set. Using insecure default — fine for development only.');
+  }
+}
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -34,15 +47,36 @@ const app: express.Express = express();
 // Trust proxy headers when behind Render's reverse proxy
 app.set('trust proxy', 1);
 
-// Configure CORS - allow all origins in development, specific in production
-const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? (process.env.FRONTEND_URL || true) // Allow specific origin or all if not set
-    : true, // Allow all origins in development
-  credentials: true,
-};
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '1mb' }));
+// Configure CORS - explicit allowlist only (no permissive `true`)
+const frontendUrl = process.env.FRONTEND_URL;
+
+if (process.env.NODE_ENV === 'production' && !frontendUrl) {
+  console.error('FATAL: FRONTEND_URL env var must be set in production for CORS.');
+  process.exit(1);
+}
+
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [frontendUrl as string]
+  : (frontendUrl
+      ? [frontendUrl, 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173']
+      : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173']);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser/server-to-server requests with no Origin header
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
+app.use(express.json({
+  limit: '1mb',
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
+
+// Request correlation ID — must be early in the chain
+app.use(requestId);
 
 // Initialize stores and services
 const incidentStore = new IncidentStore();
@@ -110,14 +144,19 @@ app.use('/analyze', apiLimiter, analyzeRoutes(incidentStore, runbookStore, userS
 app.use('/anomaly', apiLimiter, anomalyRoutes(userStore));
 app.use('/incidents', apiLimiter, incidentRoutes(incidentStore, userStore, pagerduty, notificationStore, teamStore));
 app.use('/runbooks', apiLimiter, runbookRoutes(runbookStore, userStore));
-app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
-app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore));
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
+}
+app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore, process.env.PAGERDUTY_WEBHOOK_SECRET));
 app.use('/settings/integrations', settingsRoutes(settingsStore, userStore, slack, jira, opsgenie, aiProvider, pagerduty, auditStore));
 app.use('/settings/preferences', preferencesRoutes(userStore));
 app.use('/teams', teamRoutes(teamStore, userStore, auditStore));
 app.use('/notifications', notificationRoutes(notificationStore, userStore));
 app.use('/audit-log', auditRoutes(auditStore, userStore));
 app.use('/org', orgRoutes(userStore));
+
+// Global error handler — must be last middleware
+app.use(errorHandler);
 
 async function start() {
   // Connect to MongoDB (falls back to in-memory if unavailable)

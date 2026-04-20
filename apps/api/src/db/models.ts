@@ -251,3 +251,13 @@ const AuditLogSchema = new Schema({
 }, { timestamps: false, versionKey: false });
 
 export const AuditLogModel = mongoose.model('AuditLog', AuditLogSchema);
+
+// --- Refresh Token ---
+const RefreshTokenSchema = new Schema({
+  token: { type: String, required: true, unique: true, index: true },
+  userId: { type: String, required: true, index: true },
+  orgId: { type: String, required: true },
+  expiresAt: { type: Date, required: true, expires: 0 }, // MongoDB TTL index — auto-deletes when timestamp passes
+}, { timestamps: false, versionKey: false });
+
+export const RefreshTokenModel = mongoose.model('RefreshToken', RefreshTokenSchema);
