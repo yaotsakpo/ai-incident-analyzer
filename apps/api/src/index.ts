@@ -128,7 +128,7 @@ app.use('/runbooks', apiLimiter, runbookRoutes(runbookStore, userStore));
 if (process.env.NODE_ENV !== 'production') {
   app.use('/seed', apiLimiter, seedRoutes(incidentStore, runbookStore, userStore, teamStore, notificationStore));
 }
-app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore));
+app.use('/webhooks', webhookLimiter, webhookRoutes(incidentStore, process.env.PAGERDUTY_WEBHOOK_SECRET));
 app.use('/settings/integrations', settingsRoutes(settingsStore, userStore, slack, jira, opsgenie, aiProvider, pagerduty, auditStore));
 app.use('/settings/preferences', preferencesRoutes(userStore));
 app.use('/teams', teamRoutes(teamStore, userStore, auditStore));
