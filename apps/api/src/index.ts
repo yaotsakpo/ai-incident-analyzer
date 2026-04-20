@@ -47,17 +47,29 @@ const app: express.Express = express();
 // Trust proxy headers when behind Render's reverse proxy
 app.set('trust proxy', 1);
 
-// Configure CORS - require explicit origin in production
-const allowedOrigin = process.env.NODE_ENV === 'production'
-  ? process.env.FRONTEND_URL
-  : true;
+// Configure CORS - explicit allowlist only (no permissive `true`)
+const frontendUrl = process.env.FRONTEND_URL;
 
-if (process.env.NODE_ENV === 'production' && !allowedOrigin) {
+if (process.env.NODE_ENV === 'production' && !frontendUrl) {
   console.error('FATAL: FRONTEND_URL env var must be set in production for CORS.');
   process.exit(1);
 }
 
-app.use(cors({ origin: allowedOrigin, credentials: true }));
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [frontendUrl as string]
+  : (frontendUrl
+      ? [frontendUrl, 'http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173']
+      : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173']);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser/server-to-server requests with no Origin header
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json({
   limit: '1mb',
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
