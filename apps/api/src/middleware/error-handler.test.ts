@@ -62,7 +62,20 @@ describe('errorHandler middleware', () => {
     errorHandler(err, {} as Request, res, vi.fn() as NextFunction);
 
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'not found' });
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('handles non-Error thrown values', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const res = mockRes();
+    errorHandler('something went wrong', {} as Request, res, vi.fn() as NextFunction);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'something went wrong' });
 
     process.env.NODE_ENV = originalEnv;
   });
