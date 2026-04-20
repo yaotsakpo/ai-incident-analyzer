@@ -25,4 +25,9 @@ describe('verifyPagerDutySignature', () => {
     const body = JSON.stringify({ event: {} });
     expect(verifyPagerDutySignature(body, undefined, undefined)).toBe(true);
   });
+
+  it('returns false when header is missing but secret is configured', () => {
+    const body = JSON.stringify({ event: {} });
+    expect(verifyPagerDutySignature(body, undefined, secret)).toBe(false);
+  });
 });

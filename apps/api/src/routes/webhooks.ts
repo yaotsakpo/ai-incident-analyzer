@@ -27,7 +27,7 @@ export function webhookRoutes(incidentStore: IncidentStore, webhookSecret?: stri
   // PagerDuty V3 Webhook receiver
   router.post('/pagerduty', async (req: Request, res: Response) => {
     try {
-      const rawBody = JSON.stringify(req.body);
+      const rawBody = (req as any).rawBody?.toString('utf8') ?? JSON.stringify(req.body);
       const sig = req.headers['x-pagerduty-signature'] as string | undefined;
 
       if (!verifyPagerDutySignature(rawBody, sig, webhookSecret)) {
