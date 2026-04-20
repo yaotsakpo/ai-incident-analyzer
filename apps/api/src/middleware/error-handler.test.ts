@@ -39,7 +39,7 @@ describe('errorHandler middleware', () => {
     process.env.NODE_ENV = originalEnv;
   });
 
-  it('uses statusCode from error if set', () => {
+  it('uses statusCode from error if set (development)', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
@@ -48,6 +48,21 @@ describe('errorHandler middleware', () => {
     errorHandler(err, {} as Request, res, vi.fn() as NextFunction);
 
     expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'not found' });
+
+    process.env.NODE_ENV = originalEnv;
+  });
+
+  it('uses statusCode from error if set (production)', () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    const err = Object.assign(new Error('not found'), { statusCode: 404 });
+    const res = mockRes();
+    errorHandler(err, {} as Request, res, vi.fn() as NextFunction);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
 
     process.env.NODE_ENV = originalEnv;
   });
