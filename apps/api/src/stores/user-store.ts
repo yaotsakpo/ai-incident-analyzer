@@ -219,10 +219,10 @@ export class UserStore {
   logout(token: string, refreshToken?: string): void {
     this.tokens.delete(token);
     this.revokedTokens.add(token);
-    if (refreshToken) {
+    if (typeof refreshToken === 'string' && refreshToken.length > 0) {
       this.refreshTokens.delete(refreshToken);
       if (this.useMongo()) {
-        RefreshTokenModel.deleteOne({ token: refreshToken }).catch(() => {});
+        RefreshTokenModel.deleteOne({ token: { $eq: refreshToken } }).catch(() => {});
       }
     }
     // Prune old entries periodically (simple size cap)
