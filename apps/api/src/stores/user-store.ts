@@ -129,12 +129,15 @@ export class UserStore {
 
   /** Validate a refresh token and issue a new token pair (rotation) */
   async refreshAccessToken(refreshToken: string): Promise<{ user: User; token: string; refreshToken: string } | null> {
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) return null;
+    const normalizedToken = refreshToken.trim();
+
     // Check in-memory first (fast path)
-    let entry = this.refreshTokens.get(refreshToken);
+    let entry = this.refreshTokens.get(normalizedToken);
 
     if (!entry && this.useMongo()) {
       // Fall back to MongoDB (handles restarts where in-memory map was cleared)
-      const doc = await RefreshTokenModel.findOne({ token: refreshToken }).lean();
+      const doc = await RefreshTokenModel.findOne({ token: { $eq: normalizedToken } }).lean();
       if (doc) {
         const d = doc as any;
         entry = { userId: d.userId, orgId: d.orgId, expiresAt: new Date(d.expiresAt).getTime() };
@@ -142,14 +145,14 @@ export class UserStore {
     }
 
     if (!entry || entry.expiresAt < Date.now()) {
-      if (entry) this.refreshTokens.delete(refreshToken);
+      if (entry) this.refreshTokens.delete(normalizedToken);
       return null;
     }
 
     // Rotate: delete old, issue new pair
-    this.refreshTokens.delete(refreshToken);
+    this.refreshTokens.delete(normalizedToken);
     if (this.useMongo()) {
-      await RefreshTokenModel.deleteOne({ token: refreshToken });
+      await RefreshTokenModel.deleteOne({ token: { $eq: normalizedToken } });
     }
 
     const user = await this.getUser(entry.userId);

@@ -47,10 +47,10 @@ export function authRoutes(userStore: UserStore, teamStore?: TeamStore, auditSto
 
   router.post('/refresh', async (req: Request, res: Response) => {
     const { refreshToken } = req.body;
-    if (!refreshToken) {
+    if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
       return res.status(400).json({ error: 'refreshToken is required' });
     }
-    const result = await userStore.refreshAccessToken(refreshToken);
+    const result = await userStore.refreshAccessToken(refreshToken.trim());
     if (!result) {
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
